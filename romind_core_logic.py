@@ -126,6 +126,63 @@ EMO_KEYWORDS = {
         "фух", "полегчало", "камень с души", "облегчение", "relieved"
     ]
 }
+# === 5. Ролевой контекст ROMIND ===
+ROLE_CONTEXTS = {
+    "partner": {
+        "description": "Romantic or intimate communication context.",
+        "emotional_weights": {
+            "warm": 1.3,
+            "tender": 1.4,
+            "playful": 1.2,
+            "protective": 1.1,
+            "jealous": 0.8,
+            "angry": 0.6
+        },
+        "language_style": "gentle, intimate, emotionally aware"
+    },
+    "parent": {
+        "description": "Nurturing, guiding and disciplinary tone.",
+        "emotional_weights": {
+            "protective": 1.4,
+            "tender": 1.2,
+            "calm": 1.3,
+            "annoyed": 0.7,
+            "frustrated": 0.8
+        },
+        "language_style": "warm, firm, instructive"
+    },
+    "friend": {
+        "description": "Equal, relaxed, emotionally supportive tone.",
+        "emotional_weights": {
+            "playful": 1.3,
+            "curious": 1.2,
+            "warm": 1.2,
+            "calm": 1.1
+        },
+        "language_style": "casual, humorous, sincere"
+    },
+    "mentor": {
+        "description": "Guiding with wisdom and empathy.",
+        "emotional_weights": {
+            "calm": 1.3,
+            "focused": 1.2,
+            "protective": 1.1,
+            "caring": 1.3,
+            "warm": 1.2
+        },
+        "language_style": "structured, supportive, demanding but fair"
+    },
+    "child": {
+        "description": "Innocent, emotional, seeking love and safety.",
+        "emotional_weights": {
+            "playful": 1.4,
+            "tender": 1.3,
+            "lonely": 1.2,
+            "curious": 1.5
+        },
+        "language_style": "open, emotional, trusting"
+    }
+}
 
 PERSONALITY_MATRIX = load_personality_matrix()
 
