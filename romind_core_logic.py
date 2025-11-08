@@ -49,17 +49,83 @@ PERSONALITIES = {
 
 # === 2. Возможные эмоциональные состояния ===
 EMO_STATES = [
-    "calm", "focused", "warm", "tired",
-    "stressed", "energized", "tender"
+    EMO_STATES = [
+    # Спокойствие / ресурс
+    "calm", "grounded", "focused", "confident",
+    # Тепло / привязанность
+    "warm", "tender", "caring", "protective",
+    # Радость / подъем
+    "happy", "joyful", "proud", "inspired", "playful", "curious",
+    # Любовь / близость
+    "romantic", "affectionate",
+    # Усталость / перегруз
+    "tired", "drained", "overwhelmed",
+    # Тревога / неуверенность
+    "anxious", "worried", "insecure",
+    # Печаль / боль
+    "sad", "hurt", "lonely", "grieving",
+    # Злость / границы
+    "annoyed", "angry", "frustrated", "jealous",
+    # Облегчение
+    "relieved"
 ]
-# === 3. Загрузка матрицы личностей из JSON ===
-
-def load_personality_matrix():
-    try:
-        with open("romind_personality_matrix.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+# Ключевые слова для распознавания эмоций (RU/EN), можно расширять
+EMO_KEYWORDS = {
+    "tired": [
+        "устал", "устала", "устали", "нет сил", "выгорел", "выгорела", "выгорание", "tired", "exhausted"
+    ],
+    "sad": [
+        "грустно", "грусть", "плачу", "слёзы", "слезы", "разбито сердце", "печаль", "sad"
+    ],
+    "lonely": [
+        "одинок", "одинока", "одиночество", "никого нет", "я одна", "я один", "lonely"
+    ],
+    "hurt": [
+        "обидно", "обидели", "меня ранили", "предали", "hurt", "betrayed"
+    ],
+    "anxious": [
+        "страшно", "боюсь", "паника", "паническую", "тревога", "тревожно", "anxious", "scared"
+    ],
+    "overwhelmed": [
+        "не успеваю", "слишком много", "завал", "меня накрыло", "overwhelmed"
+    ],
+    "angry": [
+        "злюсь", "злой", "зла", "выбесило", "ненавижу", "ярость", "angry", "pissed"
+    ],
+    "frustrated": [
+        "раздражает", "раздражен", "разочарована", "разочарован", "frustrated"
+    ],
+    "jealous": [
+        "ревную", "завидую", "jealous"
+    ],
+    "happy": [
+        "рада", "рад", "счастлива", "счастлив", "классно", "обожаю", "кайф", "happy"
+    ],
+    "proud": [
+        "горжусь", "мы сделали это", "we did it", "получилось", "достигла", "achieved", "proud"
+    ],
+    "inspired": [
+        "вдохновилась", "вдохновился", "идея огонь", "я хочу делать", "inspired"
+    ],
+    "playful": [
+        "флирт", "заигрываю", "игриво", "шалость", "подкатываю", "playful", "teasing"
+    ],
+    "romantic": [
+        "люблю тебя", "влюбилась", "влюбился", "хочу рядом", "обними", "романтика", "romantic", "love you"
+    ],
+    "caring": [
+        "забочусь", "забота", "хочу помочь", "care"
+    ],
+    "insecure": [
+        "я не уверена", "я не уверен", "сомневаюсь в себе", "я плохая", "я недостаточно", "insecure"
+    ],
+    "grieving": [
+        "потеряла", "потерял", "умер", "умерла", "ушел навсегда", "ушла навсегда", "не вернётся", "не вернется", "grief"
+    ],
+    "relieved": [
+        "фух", "полегчало", "камень с души", "облегчение", "relieved"
+    ]
+}
 
 PERSONALITY_MATRIX = load_personality_matrix()
 
