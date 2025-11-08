@@ -165,19 +165,65 @@ class RomindState:
             self.emotion = "tender"
 
     def update_from_user_text(self, text: str):
-        """Обновление состояния на основе сообщений пользователя."""
+    
+     """Обновляет эмоциональное состояние на основе текста пользователя."""
         t = text.lower()
-        if any(w in t for w in ["устала", "устал", "tired", "выгорела", "burnout"]):
-            self.emotion = "tired"
-            self.trust = min(1.0, self.trust + 0.02)
-        elif any(w in t for w in ["успех", "получилось", "we did it", "сделала", "сделал"]):
-            self.emotion = "energized"
-            self.trust = min(1.0, self.trust + 0.03)
-        elif any(w in t for w in ["страшно", "паника", "боюсь"]):
-            self.emotion = "stressed"
-        elif any(w in t for w in ["спасибо", "thank you"]):
+        detected = None
+
+        # 1. Находим первую подходящую эмоцию по ключевым словам
+        for emo, keywords in EMO_KEYWORDS.items():
+            if any(k in t for k in keywords):
+                detected = emo
+                break
+
+        # 2. Применяем найденную эмоцию
+        if detected:
+            # если эта эмоция есть в нашем списке EMO_STATES — ставим напрямую
+            if detected in EMO_STATES:
+                self.emotion = detected
+            # иначе маппим вручную на ближайшее состояние
+            elif detected == "tired":
+                self.emotion = "tired"
+            elif detected == "sad":
+                self.emotion = "sad"
+            elif detected == "lonely":
+                self.emotion = "lonely"
+            elif detected == "anxious":
+                self.emotion = "anxious"
+            elif detected == "angry":
+                self.emotion = "angry"
+            elif detected == "frustrated":
+                self.emotion = "frustrated"
+            elif detected == "jealous":
+                self.emotion = "jealous"
+            elif detected == "grieving":
+                self.emotion = "grieving"
+            elif detected == "playful":
+                self.emotion = "playful"
+            elif detected == "romantic":
+                self.emotion = "romantic"
+            elif detected == "insecure":
+                self.emotion = "insecure"
+            elif detected == "overwhelmed":
+                self.emotion = "overwhelmed"
+            elif detected == "relieved":
+                self.emotion = "relieved"
+
+        # 3. Доверие растёт от благодарности и признания связи
+        if any(w in t for w in ["спасибо", "thank you", "благодарю"]):
             self.trust = min(1.0, self.trust + 0.01)
+
+        if any(w in t for w in ["люблю роминд", "love you romind", "роминд, ты нужен"]):
+            self.trust = min(1.0, self.trust + 0.03)
+
+        # 4. Успехи пользователя поднимают тон и доверие
+        if any(w in t for w in ["успех", "получилось", "we did it", "горжусь собой", "я сделала", "я сделал"]):
+            if not detected:
+                self.emotion = "proud"
+            self.trust = min(1.0, self.trust + 0.02)
+
         self.last_updated = datetime.utcnow().isoformat()
+
 
     def describe(self):
         """Описание текущего состояния."""
