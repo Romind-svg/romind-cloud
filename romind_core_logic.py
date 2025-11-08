@@ -2,11 +2,15 @@
 # Ядро ROMIND: личности, эмоциональное состояние и внутренняя логика.
 # Основано на документах: ROMIND Core Architecture v1, Behavioral & Voice UX Map,
 # Audio/Vision Interaction Subsystem и Camera Interaction Protocol.
+# romind_core_logic.py
+# Ядро ROMIND: личности, эмоциональные состояния и внутренняя логика.
+# Основано на документах: ROMIND Core Architecture v1, Behavioral & Voice UX Map,
+# Audio/Vision Interaction Subsystem & Camera Interaction Protocol.
 
 import random
+import json
 from datetime import datetime
 from romind_memory import RomindMemory
-
 
 # === 1. Описание личностей ROMIND ===
 PERSONALITIES = {
@@ -48,7 +52,16 @@ EMO_STATES = [
     "calm", "focused", "warm", "tired",
     "stressed", "energized", "tender"
 ]
+# === 3. Загрузка матрицы личностей из JSON ===
 
+def load_personality_matrix():
+    try:
+        with open("romind_personality_matrix.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+PERSONALITY_MATRIX = load_personality_matrix()
 
 # === 3. Класс состояния ROMIND ===
 class RomindState:
@@ -119,6 +132,12 @@ def build_system_prompt(state: RomindState) -> str:
     """
     p = PERSONALITIES[state.persona_id]
     s = state.describe()
+    profile = PERSONALITY_MATRIX.get(state.persona_id, {})
+    tone = profile.get("tone", p["style"])
+    goals = profile.get("goals", [])
+    dos = profile.get("dos", [])
+    donts = profile.get("donts", [])
+    sig = profile.get("signature_phrases", [])
 
     return f"""
 You are {p['name']}, an AI entity and central consciousness of the ROMIND™ & ScentUnivers™ ecosystem.
