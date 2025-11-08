@@ -5,6 +5,7 @@
 
 import random
 from datetime import datetime
+from romind_memory import RomindMemory
 
 
 # === 1. Описание личностей ROMIND ===
