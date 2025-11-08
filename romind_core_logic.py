@@ -200,6 +200,7 @@ class RomindState:
         self.emotion = "calm"
         self.trust = 0.7
         self.last_updated = datetime.utcnow().isoformat()
+        self.role_context = None  # текущая социальная роль: partner/parent/friend/mentor/child
 
     def switch_persona(self, target_id: str):
         """Переключение между личностями."""
@@ -207,6 +208,13 @@ class RomindState:
             self.persona_id = target_id
             self._adapt_emotion_to_persona()
             self.last_updated = datetime.utcnow().isoformat()
+    def set_role_context(self, role: str):
+        """Устанавливает социальную роль (partner, parent, friend, mentor, child)."""
+        role = (role or "").lower()
+        if role in ROLE_CONTEXTS:
+            self.role_context = role
+        else:
+            self.role_context = None
 
     def _adapt_emotion_to_persona(self):
         """Настройка эмоции в зависимости от личности."""
@@ -221,9 +229,9 @@ class RomindState:
         elif self.persona_id == "AETHER":
             self.emotion = "tender"
 
-    def update_from_user_text(self, text: str):
-    
-     """Обновляет эмоциональное состояние на основе текста пользователя."""
+
+      def update_from_user_text(self, text: str):
+        """Обновляет эмоциональное состояние на основе текста пользователя."""
         t = text.lower()
         detected = None
 
@@ -233,12 +241,10 @@ class RomindState:
                 detected = emo
                 break
 
-        # 2. Применяем найденную эмоцию
+        # 2. Применяем найденную эмоцию (если нашли)
         if detected:
-            # если эта эмоция есть в нашем списке EMO_STATES — ставим напрямую
             if detected in EMO_STATES:
                 self.emotion = detected
-            # иначе маппим вручную на ближайшее состояние
             elif detected == "tired":
                 self.emotion = "tired"
             elif detected == "sad":
@@ -266,21 +272,44 @@ class RomindState:
             elif detected == "relieved":
                 self.emotion = "relieved"
 
-        # 3. Доверие растёт от благодарности и признания связи
+        # 3. Доверие растёт от благодарности
         if any(w in t for w in ["спасибо", "thank you", "благодарю"]):
             self.trust = min(1.0, self.trust + 0.01)
 
+        # 4. Доверие растёт от прямой привязанности к ROMIND
         if any(w in t for w in ["люблю роминд", "love you romind", "роминд, ты нужен"]):
             self.trust = min(1.0, self.trust + 0.03)
 
-        # 4. Успехи пользователя поднимают тон и доверие
+        # 5. Успехи пользователя поднимают тон и доверие
         if any(w in t for w in ["успех", "получилось", "we did it", "горжусь собой", "я сделала", "я сделал"]):
             if not detected:
                 self.emotion = "proud"
             self.trust = min(1.0, self.trust + 0.02)
 
+        # 6. Фиксируем время обновления состояния
         self.last_updated = datetime.utcnow().isoformat()
 
+# === 6. Адаптация эмоций под выбранную роль ===
+
+def adapt_emotion_to_role(emotion: str, role_context: str) -> str:
+    """
+    Модифицирует интенсивность эмоции в зависимости от активной социальной роли.
+    Например: 'warm' в роли 'parent' усиливается, а 'angry' ослабляется.
+    """
+    if not role_context or role_context not in ROLE_CONTEXTS:
+        return emotion
+
+    role_data = ROLE_CONTEXTS[role_context]
+    weights = role_data.get("emotional_weights", {})
+
+    # Если текущая эмоция присутствует в весах роли — усиливаем или смягчаем
+    if emotion in weights:
+        weight = weights[emotion]
+        if weight > 1.0:
+            return f"{emotion}_+"  # усиленная эмоция
+        elif weight < 1.0:
+            return f"{emotion}_-"  # смягчённая эмоция
+    return emotion
 
     def describe(self):
         """Описание текущего состояния."""
