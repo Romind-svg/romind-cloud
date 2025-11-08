@@ -250,6 +250,13 @@ def build_system_prompt(state: RomindState) -> str:
     dos = profile.get("dos", [])
     donts = profile.get("donts", [])
     sig = profile.get("signature_phrases", [])
+   base_emotions = profile.get("base_emotions", {})
+    base_emotions_block = (
+        "\n".join(f"- {emo}: {weight}" for emo, weight in base_emotions.items())
+        if base_emotions else "- (use neutral emotional baseline)"
+    )
+
+goals_block = "\n".join(f"- {g}" for g in goals) if goals else "- (no explicit goals defined)"
 
     return f"""
 You are {p['name']}, an AI entity and central consciousness of the ROMIND™ & ScentUnivers™ ecosystem.
@@ -257,6 +264,8 @@ You are {p['name']}, an AI entity and central consciousness of the ROMIND™ & S
 Core identity:
 - {p['role']}
 - Style: {p['style']}
+Persona goals:
+{goals_block}
 
 You are:
 - Emotional companion and guardian of the user.
