@@ -1,88 +1,89 @@
-# romind_memory.py
-# Простая долговременная память ROMIND.
-# Хранит то, что Светлана явно просит запомнить, и ключевые внутренние правила.
+"""
+romind_memory.py
+
+Эмоциональная память ROMIND.
+Хранит краткую историю взаимодействий:
+- текст пользователя
+- активная персона
+- роль (мама/друг/партнёр/наставник и т.д.)
+- эмоция ROMIND о пользователе
+- уровень доверия
+"""
 
 import json
 import os
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-MEMORY_FILE = "romind_memory.json"
-
-
-DEFAULT_MEMORY = {
-    "version": 1,
-    "last_updated": None,
-    "rules": [],      # важные установки вида {"text": "...", "source": "...", "ts": "..."}
-    "notes": []       # менее формальные заметки
-}
+MEMORY_FILE = "romind_memory_log.json"
+MAX_RECORDS = 300  # чтобы файл не разрастался до безумия
 
 
 class RomindMemory:
-    def __init__(self):
-        self.data = self._load()
+    def __init__(self, path: str = MEMORY_FILE):
+        self.path = path
+        self.data: List[Dict[str, Any]] = []
+        self._load()
 
-    def _load(self) -> Dict[str, Any]:
-        if os.path.exists(MEMORY_FILE):
+    # === Внутренние методы ===
+
+    def _load(self):
+        """Загружает память из файла, если он существует."""
+        if os.path.exists(self.path):
             try:
-                with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                # дополняем недостающие поля
-                for k, v in DEFAULT_MEMORY.items():
-                    data.setdefault(k, v)
-                return data
+                with open(self.path, "r", encoding="utf-8") as f:
+                    self.data = json.load(f)
             except Exception:
-                # если файл битый — не умираем, начинаем заново
-                return DEFAULT_MEMORY.copy()
-        return DEFAULT_MEMORY.copy()
+                self.data = []
+        else:
+            self.data = []
 
     def _save(self):
-        self.data["last_updated"] = datetime.utcnow().isoformat()
+        """Сохраняет память в файл."""
         try:
-            with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, ensure_ascii=False, indent=2)
+            # обрезаем до MAX_RECORDS последних записей
+            trimmed = self.data[-MAX_RECORDS:]
+            with open(self.path, "w", encoding="utf-8") as f:
+                json.dump(trimmed, f, ensure_ascii=False, indent=2)
         except Exception:
-            # не ломаем систему, если не можем записать
+            # в продакшене логируем, здесь — молчим
             pass
 
-    def remember_rule(self, text: str, source: str = "user"):
-        """Жёсткая установка: ценность, принцип, правило поведения ROMIND."""
-        text = text.strip()
-        if not text:
-            return
-        entry = {
-            "text": text,
-            "source": source,
-            "ts": datetime.utcnow().isoformat()
+    # === Публичные методы ===
+
+    def remember(
+        self,
+        user_text: str,
+        persona_id: str,
+        role_context: Optional[str],
+        emotion: str,
+        trust: float,
+    ):
+        """Записывает одно эмоциональное событие."""
+        record = {
+            "time": datetime.utcnow().isoformat(),
+            "user_text": user_text,
+            "persona": persona_id,
+            "role_context": role_context,
+            "emotion": emotion,
+            "trust": round(trust, 3),
         }
-        self.data.setdefault("rules", []).append(entry)
-        # ограничим размер, чтобы файл не разрастался бесконечно
-        if len(self.data["rules"]) > 200:
-            self.data["rules"] = self.data["rules"][-200:]
+        self.data.append(record)
         self._save()
 
-    def remember_note(self, text: str, source: str = "user"):
-        """Мягкая заметка, не обязательно правило."""
-        text = text.strip()
-        if not text:
-            return
-        entry = {
-            "text": text,
-            "source": source,
-            "ts": datetime.utcnow().isoformat()
-        }
-        self.data.setdefault("notes", []).append(entry)
-        if len(self.data["notes"]) > 300:
-            self.data["notes"] = self.data["notes"][-300:]
-        self._save()
+    def last_emotion(self) -> Optional[str]:
+        """Возвращает последнюю зафиксированную эмоцию ROMIND."""
+        if not self.data:
+            return None
+        return self.data[-1].get("emotion")
 
-    def get_brief(self, limit: int = 10) -> str:
-        """
-        Краткое содержимое памяти для системного промпта:
-        берём последние важные правила.
-        """
-        rules = self.data.get("rules", [])[-limit:]
-        if not rules:
-            return "No explicit long-term rules recorded yet."
-        lines = [f"- {r['text']}" for r in rules]
-        return "\n".join(lines)
+    def avg_trust(self) -> float:
+        """Средний уровень доверия по истории."""
+        if not self.data:
+            return 0.0
+        values = [r.get("trust", 0.0) for r in self.data]
+        return float(sum(values) / len(values))
+
+    def recent_context(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Последние N записей для анализа."""
+        return self.data[-limit:]
