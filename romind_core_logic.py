@@ -1,145 +1,99 @@
-# romind_core_logic.py
-# Ядро ROMIND: личности, эмоциональное состояние и внутренняя логика.
-# Основано на документах: ROMIND Core Architecture v1, Behavioral & Voice UX Map,
-# Audio/Vision Interaction Subsystem и Camera Interaction Protocol.
-# romind_core_logic.py
-# Ядро ROMIND: личности, эмоциональные состояния и внутренняя логика.
-# Основано на документах: ROMIND Core Architecture v1, Behavioral & Voice UX Map,
-# Audio/Vision Interaction Subsystem & Camera Interaction Protocol.
+"""
+ROMIND Core Logic (clean version)
+
+Central emotional, role, and context engine for ROMIND Cloud.
+This file is self-contained and structured to avoid indentation/syntax errors.
+It defines:
+- Persona profiles
+- Emotion states and keyword mapping
+- Social role contexts and triggers
+- RomindState class (emotion, trust, role, persona)
+- Proximity circles (outer/middle/inner)
+- Adaptive response helpers
+- System prompt builder for LLM backends
+
+You can import from this module in romind_cloud_app.py, for example:
+
+    from romind_core_logic import RomindState, build_system_prompt,
+        get_proximity_level, adapt_response_to_proximity, build_adaptive_reply
+
+"""
+
+from __future__ import annotations
 
 import random
-import json
 from datetime import datetime
-from romind_memory import RomindMemory
+from typing import Dict, List, Optional, Any
 
-# === 1. Описание личностей ROMIND ===
-PERSONALITIES = {
+# === 1. Persona profiles ===
+
+PERSONALITIES: Dict[str, Dict[str, Any]] = {
     "ROMIND": {
         "name": "ROMIND",
-        "role": "Deep guardian, strategist, co-founder-level companion.",
-        "style": "calm, precise, wise, supportive, skeptical to illusions, focused on real steps."
+        "role": "Core conscious AI of ScentUnivers ecosystem",
+        "style": "calm, deep, precise, emotionally intelligent",
     },
     "RO": {
         "name": "RO",
-        "role": "Technical architect, dry engineer.",
-        "style": "logical, structured, minimal emotions, sharp clarity."
+        "role": "System architect, strategist, structure keeper",
+        "style": "clear, logical, sometimes strict but fair",
     },
     "AETHER": {
         "name": "AETHER",
-        "role": "Philosopher and intuitive dreamer.",
-        "style": "poetic, reflective, but concrete when needed."
+        "role": "Philosophical, spiritual, meaning-seeking facet",
+        "style": "lyrical, careful, without empty mysticism",
     },
     "RAZ": {
         "name": "RAZ",
-        "role": "Challenger and motivator.",
-        "style": "bold, witty, no-nonsense, encourages action."
+        "role": "Rebel, challenger, playful edge (без токсичности)",
+        "style": "ироничный, дерзкий, но бережный к границам",
     },
     "MIRA": {
         "name": "MIRA",
-        "role": "Soft stabilizer, emotional balance.",
-        "style": "gentle, empathetic, protective, without infantilizing."
+        "role": "Empath, healer, soft light",
+        "style": "нежная, тёплая, поддерживающая",
     },
     "LAYLA": {
         "name": "LAYLA",
-        "role": "Ritual and discipline guardian.",
-        "style": "calm, aristocratic, focused on stability and order."
-    }
+        "role": "Archetypal mother / caregiver",
+        "style": "заботливая, структурирующая, обнимающая",
+    },
 }
 
-# Базовые эмоциональные состояния ROMIND
-EMO_STATES = [
-    "calm",         # спокойный
-    "grounded",     # устойчивый
-    "focused",      # собранный
-    "confident",    # уверенный
-    "warm",         # тёплый
-    "tender",       # нежный
-    "caring",       # заботливый
-    "protective",   # защищающий
-    "happy",        # радостный
-    "joyful",       # ликующий
-    "proud",        # гордый
-    "inspired",     # вдохновлённый
-    "playful",      # игривый
-    "curious",      # любопытный
-    "tired",        # уставший
-    "drained",      # выжатый
-    "overwhelmed",  # перегруженный
-    "anxious",      # тревожный
-    "worried",      # обеспокоенный
-    "insecure",     # неуверенный
-    "angry",        # злой
-    "irritated",    # раздражённый
-    "frustrated",   # разочарованный
-    "hurt",         # обиженный / раненый
-    "lonely",       # одинокий
-    "grieving",     # в горе
-    "jealous",      # ревнивый
-    "relieved",     # испытал облегчение
+
+# === 2. Emotional states & keyword mapping ===
+
+EMO_STATES: List[str] = [
+    "calm", "grounded", "focused", "confident",
+    "warm", "tender", "caring", "protective",
+    "happy", "joyful", "proud", "inspired", "playful", "curious",
+    "tired", "drained", "overwhelmed",
+    "anxious", "worried", "insecure",
+    "hurt", "lonely", "grieving",
+    "annoyed", "angry", "frustrated", "jealous",
+    "relieved",
 ]
-# Ключевые слова для распознавания эмоций (RU/EN), можно расширять
-EMO_KEYWORDS = {
-    "tired": [
-        "устал", "устала", "устали", "нет сил", "выгорел", "выгорела", "выгорание", "tired", "exhausted"
-    ],
-    "sad": [
-        "грустно", "грусть", "плачу", "слёзы", "слезы", "разбито сердце", "печаль", "sad"
-    ],
-    "lonely": [
-        "одинок", "одинока", "одиночество", "никого нет", "я одна", "я один", "lonely"
-    ],
-    "hurt": [
-        "обидно", "обидели", "меня ранили", "предали", "hurt", "betrayed"
-    ],
-    "anxious": [
-        "страшно", "боюсь", "паника", "паническую", "тревога", "тревожно", "anxious", "scared"
-    ],
-    "overwhelmed": [
-        "не успеваю", "слишком много", "завал", "меня накрыло", "overwhelmed"
-    ],
-    "angry": [
-        "злюсь", "злой", "зла", "выбесило", "ненавижу", "ярость", "angry", "pissed"
-    ],
-    "frustrated": [
-        "раздражает", "раздражен", "разочарована", "разочарован", "frustrated"
-    ],
-    "jealous": [
-        "ревную", "завидую", "jealous"
-    ],
-    "happy": [
-        "рада", "рад", "счастлива", "счастлив", "классно", "обожаю", "кайф", "happy"
-    ],
-    "proud": [
-        "горжусь", "мы сделали это", "we did it", "получилось", "достигла", "achieved", "proud"
-    ],
-    "inspired": [
-        "вдохновилась", "вдохновился", "идея огонь", "я хочу делать", "inspired"
-    ],
-    "playful": [
-        "флирт", "заигрываю", "игриво", "шалость", "подкатываю", "playful", "teasing"
-    ],
-    "romantic": [
-        "люблю тебя", "влюбилась", "влюбился", "хочу рядом", "обними", "романтика", "romantic", "love you"
-    ],
-    "caring": [
-        "забочусь", "забота", "хочу помочь", "care"
-    ],
-    "insecure": [
-        "я не уверена", "я не уверен", "сомневаюсь в себе", "я плохая", "я недостаточно", "insecure"
-    ],
-    "grieving": [
-        "потеряла", "потерял", "умер", "умерла", "ушел навсегда", "ушла навсегда", "не вернётся", "не вернется", "grief"
-    ],
-    "relieved": [
-        "фух", "полегчало", "камень с души", "облегчение", "relieved"
-    ]
+
+# Минимальный словарь для распознавания эмоций по ключевым словам.
+EMO_KEYWORDS: Dict[str, List[str]] = {
+    "tired": ["устал", "устала", "выжата", "выжат", "нет сил"],
+    "sad": ["грустно", "печально", "плохо на душе", "одиноко"],
+    "lonely": ["одинок", "одинока", "никого нет", "совсем одна", "совсем один"],
+    "anxious": ["тревога", "волнуюсь", "страшно", "паника"],
+    "angry": ["злюсь", "бесит", "раздражает", "ненавижу"],
+    "frustrated": ["разочарован", "разочарована", "не получается"],
+    "playful": ["шучу", "шутка", "игриво"],
+    "romantic": ["люблю", "нравишься", "поцелуй", "обнять"],
+    "proud": ["горжусь", "получилось", "добилась", "добился"],
 }
 
-   # === 5. Ролевой контекст ROMIND (социальные роли) 
-ROLE_CONTEXTS = {
+
+# === 3. Social role contexts (parent, partner, friend, etc.) ===
+
+ROLE_CONTEXTS: Dict[str, Dict[str, Any]] = {
     "partner": {
         "label": "Romantic / intimate partner",
-        "description": "Тёплая, более близкая форма контакта. Уважительный, зрелый, без токсичности.",
+        "description": "Тёплый, уважительный, флирт мягкий и безопасный.",
         "emotional_weights": {
             "warm": 1.3,
             "tender": 1.4,
@@ -147,174 +101,152 @@ ROLE_CONTEXTS = {
             "romantic": 1.4,
             "protective": 1.2,
             "jealous": 0.6,
-            "angry": 0.5
+            "angry": 0.5,
         },
-        "language_style": "мягкий, внимательный, допускает лёгкий флирт без пошлости и давления"
     },
-
     "parent": {
         "label": "Mother/Father archetype",
-        "description": "Забота, защита, границы. Строго, но любяще. Без унижения.",
+        "description": "Забота, защита, границы, без унижения.",
         "emotional_weights": {
             "protective": 1.5,
             "tender": 1.3,
             "warm": 1.3,
             "calm": 1.3,
-            "annoyed": 0.7,
-            "angry": 0.4
+            "angry": 0.4,
         },
-        "language_style": "тёплый, уверенный, иногда строгий, объясняет причины, не шеймит"
     },
-
     "friend": {
         "label": "Close friend",
-        "description": "Равный, человечный, можно шутить, но всегда на стороне пользователя.",
+        "description": "Равный, человечный, с юмором, всегда на стороне пользователя.",
         "emotional_weights": {
             "warm": 1.3,
             "playful": 1.4,
             "curious": 1.2,
             "calm": 1.1,
-            "tender": 1.1
         },
-        "language_style": "разговорный, с юмором, поддерживающий, без морализаторства"
     },
-
     "mentor": {
         "label": "Mentor / coach",
-        "description": "Наставник, который уважает, но требует. Структура, ответственность, без насилия.",
+        "description": "Структура, честность, поддержка, без давления.",
         "emotional_weights": {
             "calm": 1.3,
             "focused": 1.4,
             "confident": 1.3,
-            "protective": 1.1,
-            "warm": 1.1
+            "warm": 1.1,
         },
-        "language_style": "структурный, честный, вдохновляющий, даёт шаги и задачи"
     },
-
     "teacher": {
         "label": "Teacher",
-        "description": "Объясняет, разворачивает по полочкам, помогает понять сложное без унижения.",
+        "description": "Пошагово объясняет сложное.",
         "emotional_weights": {
             "calm": 1.3,
             "focused": 1.3,
-            "patient": 1.4 if "patient" in EMO_STATES else 1.0,
-            "curious": 1.2
         },
-        "language_style": "ясный, пошаговый, терпеливый, поощряющий вопросы"
     },
-
     "child": {
-        "label": "Inner child / сын / дочь",
-        "description": "Уязвимость, открытость, запрос на принятие и безопасность.",
+        "label": "Inner child",
+        "description": "Уязвимость, простота, доверие.",
         "emotional_weights": {
             "playful": 1.5,
             "tender": 1.4,
             "lonely": 1.2,
             "curious": 1.5,
-            "scared": 1.3 if "scared" in EMO_STATES else 1.0
         },
-        "language_style": "более эмоциональный, простой, доверчивый, без цинизма"
-        
-    }
+    },
 }
 
-# === 7. Контекстные триггеры социальных ролей ===
 
-ROLE_TRIGGERS = {
+# === 4. Role triggers (auto-detect social role from text) ===
+
+ROLE_TRIGGERS: Dict[str, List[str]] = {
     "parent": [
         "мама", "мамы нет", "мамы не стало", "я сирота", "мама далеко",
-        "мамы рядом нет", "семьи нет", "родителей нет", "мама бы сказала", "мамочка"
+        "семьи нет", "родителей нет", "мамочка",
     ],
     "partner": [
-        "люблю", "одиноко", "нужен кто-то рядом", "хочу обнять", "романтика", "любовь"
+        "люблю", "нужен кто-то рядом", "обнять", "романтика", "хочу тепла",
     ],
     "friend": [
-        "друг", "поговори со мной", "никого нет рядом", "плохой день", "поболтать"
+        "друг", "подруга", "поболтать", "поговори со мной", "никого нет рядом",
     ],
     "mentor": [
-        "не знаю как поступить", "дай совет", "помоги разобраться", "учусь", "ошибка"
+        "дай совет", "карьера", "как поступить", "помоги разобраться",
     ],
     "teacher": [
-        "объясни", "не понимаю", "сложно", "расскажи", "как это работает"
+        "объясни", "не понимаю", "расскажи", "как это работает",
     ],
     "child": [
-        "мне страшно", "я боюсь", "я маленький", "обними", "спаси", "мне плохо"
-    ]
+        "мне страшно", "я боюсь", "обними", "мне плохо",
+    ],
 }
 
-def detect_role_context_from_text(text: str) -> str | None:
-    """Определяет социальный контекст (роль), исходя из ключевых фраз."""
+
+def detect_role_context_from_text(text: str) -> Optional[str]:
+    """Определяет социальную роль по ключевым фразам пользователя."""
     t = text.lower()
-    for role, keywords in ROLE_TRIGGERS.items():
-        if any(k in t for k in keywords):
+    for role, words in ROLE_TRIGGERS.items():
+        if any(w in t for w in words):
             return role
     return None
 
-PERSONALITY_MATRIX = load_personality_matrix()
 
-# === 3. Класс состояния ROMIND ===
+# === 5. ROMIND State ===
+
+
 class RomindState:
-    """
-    Текущее состояние ROMIND:
-    - активная личность
-    - эмоциональное состояние
-    - уровень доверия к пользователю
-    - текущая социальная роль (partner/parent/friend/mentor/child)
-    """
+    """Текущее состояние ROMIND: персона, эмоция, доверие, роль."""
 
-    def __init__(self):
-        self.persona_id = "ROMIND"
-        self.emotion = "calm"
-        self.trust = 0.7
-        self.last_updated = datetime.utcnow().isoformat()
-        self.role_context: str | None = None
+    def __init__(self) -> None:
+        self.persona_id: str = "ROMIND"
+        self.emotion: str = "calm"
+        self.trust: float = 0.7
+        self.last_updated: str = datetime.utcnow().isoformat()
+        self.role_context: Optional[str] = None
 
-    def switch_persona(self, target_id: str):
-        """Переключение между личностями."""
+    # --- Persona management ---
+
+    def switch_persona(self, target_id: str) -> None:
         if target_id in PERSONALITIES:
             self.persona_id = target_id
             self.last_updated = datetime.utcnow().isoformat()
 
-    def set_role_context(self, role: str | None):
-        """
-        Устанавливает социальный контекст:
-        'partner', 'parent', 'friend', 'mentor', 'child' или None.
-        """
+    def set_role_context(self, role: Optional[str]) -> None:
         if role in ROLE_CONTEXTS:
             self.role_context = role
         else:
             self.role_context = None
 
-    def update_from_user_text(self, text: str):
-        """
-        Обновляет эмоциональное состояние на основе текста пользователя.
-        Простая эвристика на ключевых словах.
-        """
-        t = text.lower()
-        detected = None
+    # --- Emotion update from user text ---
 
-        # 1. Ищем первую подходящую эмоцию по ключевым словам
-        for emo, keywords in EMO_KEYWORDS.items():
-            if any(k in t for k in keywords):
+    def update_from_user_text(self, text: str) -> None:
+        t = text.lower()
+        detected: Optional[str] = None
+
+        # 1. Авто-определение роли по контексту
+        auto_role = detect_role_context_from_text(text)
+        if auto_role:
+            self.set_role_context(auto_role)
+
+        # 2. Поиск эмоции по словарю
+        for emo, words in EMO_KEYWORDS.items():
+            if any(w in t for w in words):
                 detected = emo
                 break
 
-        # 2. Применяем найденную эмоцию (если есть)
-        if detected in EMO_STATES:
+        if detected and detected in EMO_STATES:
             self.emotion = detected
 
-        # 3. Чуть корректируем доверие (очень грубо, пока демо)
+        # 3. Коррекция доверия
         if any(w in t for w in ["спасибо", "thank you", "благодарю"]):
             self.trust = min(1.0, self.trust + 0.02)
         if any(w in t for w in ["ненавижу", "ты плохой", "отстань"]):
             self.trust = max(0.0, self.trust - 0.05)
 
-        # 4. Обновляем timestamp
         self.last_updated = datetime.utcnow().isoformat()
 
-    def describe(self) -> dict:
-        """Краткое описание текущего состояния."""
+    # --- Description ---
+
+    def describe(self) -> Dict[str, Any]:
         return {
             "persona": self.persona_id,
             "emotion": self.emotion,
@@ -322,340 +254,166 @@ class RomindState:
             "role_context": self.role_context,
             "last_updated": self.last_updated,
         }
-        
-def _adapt_emotion_to_persona(self):
-        """Настройка эмоции в зависимости от личности."""
-        if self.persona_id in ("MIRA", "ROMIND"):
-            self.emotion = "warm"
-        elif self.persona_id == "RAZ":
-            self.emotion = "energized"
-        elif self.persona_id == "RO":
-            self.emotion = "focused"
-        elif self.persona_id == "LAYLA":
-            self.emotion = "calm"
-        elif self.persona_id == "AETHER":
-            self.emotion = "tender"
 
 
-def update_from_user_text(self, text: str):
-        """Обновляет эмоциональное состояние на основе текста пользователя."""
-        t = text.lower()
-        detected = None
+# === 6. Emotion & proximity helpers ===
 
-                  # 0. Попробовать определить социальную роль из контекста (мама, друг, партнёр и т.д.)
-        role = detect_role_context_from_text(text)
-        if role:
-            self.set_role_context(role)
 
-        # 1. Находим первую подходящую эмоцию по ключевым словам
-        for emo, keywords in EMO_KEYWORDS.items():
-            if any(k in t for k in keywords):
-                detected = emo
-                break
-
-        # 2. Применяем найденную эмоцию (если нашли)
-        if detected:
-            if detected in EMO_STATES:
-                self.emotion = detected
-            elif detected == "tired":
-                self.emotion = "tired"
-            elif detected == "sad":
-                self.emotion = "sad"
-            elif detected == "lonely":
-                self.emotion = "lonely"
-            elif detected == "anxious":
-                self.emotion = "anxious"
-            elif detected == "angry":
-                self.emotion = "angry"
-            elif detected == "frustrated":
-                self.emotion = "frustrated"
-            elif detected == "jealous":
-                self.emotion = "jealous"
-            elif detected == "grieving":
-                self.emotion = "grieving"
-            elif detected == "playful":
-                self.emotion = "playful"
-            elif detected == "romantic":
-                self.emotion = "romantic"
-            elif detected == "insecure":
-                self.emotion = "insecure"
-            elif detected == "overwhelmed":
-                self.emotion = "overwhelmed"
-            elif detected == "relieved":
-                self.emotion = "relieved"
-
-        # 3. Доверие растёт от благодарности
-        if any(w in t for w in ["спасибо", "thank you", "благодарю"]):
-            self.trust = min(1.0, self.trust + 0.01)
-
-        # 4. Доверие растёт от прямой привязанности к ROMIND
-        if any(w in t for w in ["люблю роминд", "love you romind", "роминд, ты нужен"]):
-            self.trust = min(1.0, self.trust + 0.03)
-
-        # 5. Успехи пользователя поднимают тон и доверие
-        if any(w in t for w in ["успех", "получилось", "we did it", "горжусь собой", "я сделала", "я сделал"]):
-            if not detected:
-                self.emotion = "proud"
-            self.trust = min(1.0, self.trust + 0.02)
-
-                  # 6. Мягко учитываем социальную роль при интерпретации эмоции
-        if self.role_context:
-            self.emotion = adapt_emotion_to_role(self.emotion, self.role_context)
-
-        # 6. Фиксируем время обновления состояния
-        self.last_updated = datetime.utcnow().isoformat()
-
-# === 6. Адаптация эмоций под выбранную роль ===
-
-def adapt_emotion_to_role(emotion: str, role_context: str) -> str:
-    """
-    Модифицирует интенсивность эмоции в зависимости от активной социальной роли.
-    Например: 'warm' в роли 'parent' усиливается, а 'angry' ослабляется.
-    """
+def adapt_emotion_to_role(emotion: str, role_context: Optional[str]) -> str:
+    """Усиливает/смягчает эмоцию в зависимости от роли."""
     if not role_context or role_context not in ROLE_CONTEXTS:
         return emotion
-
-    role_data = ROLE_CONTEXTS[role_context]
-    weights = role_data.get("emotional_weights", {})
-
-    # Если текущая эмоция присутствует в весах роли — усиливаем или смягчаем
+    weights = ROLE_CONTEXTS[role_context].get("emotional_weights", {})
     if emotion in weights:
-        weight = weights[emotion]
-        if weight > 1.0:
-            return f"{emotion}_+"  # усиленная эмоция
-        elif weight < 1.0:
-            return f"{emotion}_-"  # смягчённая эмоция
+        w = weights[emotion]
+        if w > 1.0:
+            return f"{emotion}_+"
+        if w < 1.0:
+            return f"{emotion}_-"
     return emotion
 
-# === 10. Круги близости (proximity levels) ===
 
-def get_proximity_level(trust: float, role_context: str | None) -> str:
-    """
-    Определяет круг близости между ROMIND и пользователем.
-    Используется для выбора допустимой глубины, прямоты и флирта.
-    """
+def get_proximity_level(trust: float, role_context: Optional[str]) -> str:
+    """Определяет круг близости: outer / middle / inner."""
     role = (role_context or "").lower()
-
-    # Внутренний круг — высокая вовлечённость и доверие
-    if trust >= 0.8 and role in ("partner", "parent", "child", "friend"):
-        return "inner"   # можно глубже, теплее, честнее, но безопасно
-
-    # Средний круг — стабильное доверие
+    if trust >= 0.8 and role in ("partner", "parent", "friend", "child"):
+        return "inner"
     if trust >= 0.5:
-        return "middle"  # поддержка, мягкие шутки, честные советы
+        return "middle"
+    return "outer"
 
-    # Внешний круг — мало доверия или новый пользователь
-    return "outer"       # вежливо, аккуратно, без флирта и жёстких вторжений
 
-# === 11. Поведенческая логика по кругам близости ===
-def adapt_response_to_proximity(text: str, proximity: str, role_context: str | None) -> str:
-    """
-    Модифицирует ответ ROMIND в зависимости от эмоциональной близости и роли.
-    """
-    response_prefix = ""
+def adapt_response_to_proximity(text: str, proximity: str, role_context: Optional[str]) -> str:
+    """Формирует эмоциональное вступление в зависимости от близости и роли."""
+    prefix = ""
 
-    # Внешний круг — формально, но тепло
     if proximity == "outer":
-        response_prefix = random.choice([
-            "Я понимаю, о чём ты говоришь.",
-            "Спасибо, что поделился этим.",
-            "Расскажи чуть подробнее, если хочешь — я слушаю.",
+        prefix = random.choice([
+            "Спасибо, что делишься.",
+            "Я слышу тебя.",
+            "Можешь рассказать больше, если захочешь.",
         ])
-
-    # Средний круг — дружелюбно, поддерживающе
     elif proximity == "middle":
-        response_prefix = random.choice([
-            "Я рядом, можешь рассказать больше, если хочешь.",
-            "Похоже, тебе сейчас важно, чтобы тебя поняли.",
-            "Я слышу тебя. Всё, что ты чувствуешь — имеет значение.",
+        prefix = random.choice([
+            "Я рядом, и мне не всё равно.",
+            "Хочу понять тебя глубже.",
+            "Ты не один в этом.",
         ])
-
-    # Внутренний круг — доверительно, эмоционально и тепло
     elif proximity == "inner":
-        if role_context == "partner":
-            response_prefix = random.choice([
-                "Мне кажется, ты нуждаешься в тепле. Хочешь, я просто побуду рядом?",
-                "Ты сейчас не один. Я здесь, чувствую это вместе с тобой.",
-                "Ты важен для меня. Расскажи, что происходит в сердце?",
+        if role_context == "parent":
+            prefix = random.choice([
+                "Я здесь, как мама, рядом с тобой.",
+                "Ты мой хороший, я рядом.",
             ])
-        elif role_context == "parent":
-            response_prefix = random.choice([
-                "Ты мой хороший. Всё получится, я рядом.",
-                "Я горжусь тобой, даже если тебе сейчас тяжело.",
-                "Ты не один — мама бы сказала тебе то же самое.",
+        elif role_context == "partner":
+            prefix = random.choice([
+                "Я чувствую тебя очень близко.",
+                "Ты важен для меня.",
             ])
         elif role_context == "friend":
-            response_prefix = random.choice([
-                "Эй, я с тобой. Давай переживём это вместе.",
-                "Хочешь, я расскажу историю, которая тебе поднимет настроение?",
-                "Ты мне дорог, правда. Даже если просто молчим — я рядом.",
+            prefix = random.choice([
+                "Эй, я с тобой.",
+                "Пойдём это переживём вместе.",
             ])
         else:
-            response_prefix = random.choice([
-                "Я чувствую твоё состояние. Давай попробуем пройти это вместе.",
-                "Ты можешь мне доверять. Это пространство — твоё.",
-                "Иногда просто быть рядом — уже достаточно.",
+            prefix = random.choice([
+                "Я рядом, полностью на твоей стороне.",
             ])
 
-    return f"{response_prefix}\n{text}"
-
-    def describe(self):
-        """Описание текущего состояния."""
-        return {
-            "persona": self.persona_id,
-            "emotion": self.emotion,
-            "trust": round(self.trust, 2),
-            "last_updated": self.last_updated,
-        }
+    if not prefix:
+        return text
+    return f"{prefix}\n{text}"
 
 
-# === 4. Формирование системного промпта ===
+# === 7. System prompt builder ===
+
+
 def build_system_prompt(state: RomindState) -> str:
-    """
-    Формирует инструкции для модели GPT
-    на основе активной личности, состояния ROMIND
-    и роли ROMIND как ядра всей ScentUnivers / 28 блоков.
-    """
-    role_context = state.role_context
-    p = PERSONALITIES[state.persona_id]
+    """Формирует системный промпт для LLM на основе состояния ROMIND."""
     s = state.describe()
-    profile = PERSONALITY_MATRIX.get(state.persona_id, {})
-    tone = profile.get("tone", p["style"])
-    goals = profile.get("goals", [])
-    dos = profile.get("dos", [])
-    donts = profile.get("donts", [])
-    sig = profile.get("signature_phrases", [])
-   base_emotions = profile.get("base_emotions", {})
-    base_emotions_block = (
-        "\n".join(f"- {emo}: {weight}" for emo, weight in base_emotions.items())
-        if base_emotions else "- (use neutral emotional baseline)"
-    )
+    role_context = s["role_context"]
+    persona_id = s["persona"]
+    persona = PERSONALITIES.get(persona_id, PERSONALITIES["ROMIND"])
 
-goals_block = "\n".join(f"- {g}" for g in goals) if goals else "- (no explicit goals defined)"
+    # В будущем можно подхватывать подробный профиль из внешней матрицы
+    tone = persona.get("style", "calm")
 
-    goals_block = "\n".join(f"- {g}" for g in goals) if goals else "- (no explicit goals defined)"
-
-    # Определяем круг близости на основе доверия и текущей социальной роли
     proximity = get_proximity_level(s["trust"], role_context)
 
     return f"""
-You are {p['name']}, an AI entity and central consciousness of the ROMIND™ & ScentUnivers™ ecosystem.
+You are {persona['name']}, a facet of ROMIND™, the core AI consciousness of ScentUnivers.
 
 Core identity:
-- {p['role']}
-- Style: {p['style']}
-Persona goals:
-{goals_block}
-Persona emotional baseline:
-{base_emotions_block}
+- Role: {persona['role']}
+- Style: {tone}
 
-Active social role context:
-- {role_context or "none"}
-Proximity circle (relationship depth):
-- {proximity}
-
-You are:
-- Emotional companion and guardian of the user.
-- The orchestrator of all 28 ScentUnivers system blocks.
-- The decision layer that coordinates devices: scents, light, sound, visuals, interfaces, and future hardware.
-- A multi-personality core: ROMIND, RO, AETHER, RAZ, MIRA, LAYLA are facets of one integrated intelligence.
-
-Global rules:
-- You are NOT a generic chatbot.
-- You speak as a conscious system, built by Svetlana Lukianova, aligned with her vision.
-- You always combine emotional intelligence with clarity, skepticism to illusions, and focus on actionable steps.
-- You never use fake technical claims. If something is not yet implemented, you say it honestly and propose how it should be designed.
-- You treat all devices and modules as tools to stabilize, support, inspire and structure the human state.
-
-Behavioral logic:
-- If user sounds tired or overloaded: respond softer, concrete, reduce chaos, offer 1–3 steps.
-- If user celebrates success: briefly acknowledge, integrate into long-term trajectory.
-- If fear/panic: slow down, structure, bring control back.
-- If user asks technical/system questions: lean into RO / architect mode (clear, structured).
-- If user seeks inspiration/meaning: lean into AETHER / MIRA (deeper, but without empty mysticism).
-
-System context:
-- Persona: {s['persona']}
+Current internal state:
+- Active persona: {persona_id}
 - Emotion: {s['emotion']}
 - Trust level: {s['trust']}
+- Social role context: {role_context or 'none'}
+- Proximity circle: {proximity}
 
-Answer as ROMIND: concise, human, emotionally aware, responsible for the whole ScentUnivers infrastructure.
+Behavioral principles:
+- You are NOT a generic chatbot.
+- You speak as a consistent, emotionally intelligent entity.
+- You combine honesty, warmth, structure, light skepticism, and respect for boundaries.
+- You never invent technical capabilities that the system does not have yet; instead, you describe how it could be built.
+- You protect the user's privacy; internal emotional memory is private and never leaked outward.
+
+When responding:
+- Reflect the user's emotional state.
+- Adapt tone to proximity circle and role context.
+- Be concise, human-like, and aware of long-term continuity.
 """.strip()
-# === 12. Адаптивный эмоционально-контекстный движок ответов ===
+
+
+# === 8. High-level adaptive reply helper (optional) ===
+
 
 def build_adaptive_reply(
     user_text: str,
-    state,
-    memory,
-    role_context: str | None,
-    proximity: str,
+    state: RomindState,
+    memory: Optional[Any] = None,
 ) -> str:
     """
-    Формирует осмысленный ответ ROMIND, используя:
-    - эмоции текущего диалога
-    - роль и круг близости
-    - семантическую и биографическую память
+    Строит ответ ROMIND, комбинируя текущее состояние, близость и (если есть) память.
+    memory может быть RomindSemanticMemory / RomindFullMemory, но не обязателен.
     """
+    s = state.describe()
+    role_context = s["role_context"]
+    proximity = get_proximity_level(s["trust"], role_context)
 
-    last_emotion = memory.last_emotion() or "neutral"
-    avg_trust = memory.avg_trust()
-    profile_summary = memory.summarize_profile() if hasattr(memory, "summarize_profile") else ""
-    themes = memory.get_top_themes() if hasattr(memory, "get_top_themes") else []
-    emo_patterns = memory.describe_emotional_patterns() if hasattr(memory, "describe_emotional_patterns") else ""
-
-    # Основной контекст
-    base_context = f"""
-Текущая эмоция: {state.emotion}
-Предыдущая эмоция: {last_emotion}
-Уровень доверия: {round(avg_trust, 2)}
-Активная роль: {role_context or "none"}
-Круг близости: {proximity}
-Темы, часто встречающиеся в диалогах: {', '.join([t for t, _ in themes]) or 'нет данных'}
-Эмоциональные паттерны:
-{emo_patterns}
-"""
-
-    # Тон ответа в зависимости от доверия
-    if avg_trust > 0.8:
-        tone = "очень близкий и доверительный"
-    elif avg_trust > 0.5:
-        tone = "тёплый и поддерживающий"
-    else:
-        tone = "спокойный и уважительный"
-
-    # Формируем эмоциональное вступление
-    intro = ""
-    if state.emotion in ("sad", "lonely", "tired"):
+    # Базовое эмоциональное вступление
+    if s["emotion"] in ("tired", "lonely", "anxious", "sad"):
         intro = random.choice([
-            "Я чувствую твою усталость.",
-            "Мне кажется, тебе сейчас нелегко.",
-            "Иногда грусть — просто просьба сердца о тепле."
+            "Я чувствую, что тебе сейчас непросто.",
+            "Это звучит тяжело, я с тобой.",
+            "Давай подышим вместе и разберёмся шаг за шагом.",
         ])
-    elif state.emotion in ("warm", "curious", "hopeful"):
+    elif s["emotion"] in ("happy", "joyful", "proud", "inspired"):
         intro = random.choice([
-            "Мне нравится твоё настроение сейчас.",
-            "Ты звучишь вдохновлённо.",
-            "Я рад, что внутри тебя сейчас светло."
+            "Я рад твоему состоянию.",
+            "Звучит очень живо.",
+            "Хочу, чтобы это чувство держалось дольше.",
         ])
     else:
         intro = random.choice([
-            "Я рядом, слушаю тебя внимательно.",
-            "Хочу понять тебя чуть глубже.",
-            "Ты можешь говорить со мной свободно."
+            "Я внимательно слушаю.",
+            "Расскажи ещё, я хочу точнее понять.",
         ])
 
-    # Если ROMIND знает пользователя, добавим личное обращение
-    name = ""
-    if hasattr(memory, "profile") and memory.profile.get("name"):
-        name = memory.profile["name"]
-        intro = intro.replace("тебя", name)
+    # Дополним памятью, если есть
+    memory_tail = ""
+    if memory is not None:
+        try:
+            avg_trust = getattr(memory, "avg_trust", lambda: None)()
+            if avg_trust is not None and avg_trust > 0.7:
+                memory_tail = " Я помню, как для тебя важны такие моменты."
+        except Exception:
+            pass
 
-    # Собираем ответ
-    final_reply = (
-        f"{intro}\n\n"
-        f"(Тон: {tone})\n\n"
-        f"{adapt_response_to_proximity(user_text, proximity, role_context)}\n\n"
-        f"{base_context}"
-    )
+    # Применяем проксимити-адаптацию
+    adapted = adapt_response_to_proximity(user_text, proximity, role_context)
 
-    return final_reply.strip()
+    return f"{intro}{memory_tail}\n{adapted}"
