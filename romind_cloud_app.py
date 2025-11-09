@@ -198,6 +198,7 @@ def process_user_message(user_text: str) -> str:
 
     return adaptive_reply
 
+
 # === 12. Консольный тест (локальный режим) ===
 if __name__ == "__main__":
     print("=== ROMIND Adaptive Dialogue Test ===")
