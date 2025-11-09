@@ -182,3 +182,96 @@ class RomindFullMemory(RomindMemory):
             f"Дети: {children}\n"
             f"Последний эмоциональный фон: {self.profile.get('emotional_tone', 'спокойный')}"
         )
+
+# === 3. Семантическая память (Semantic Memory Layer) ===
+
+from collections import defaultdict
+import re
+
+
+class RomindSemanticMemory(RomindFullMemory):
+    """
+    Расширение FullMemory:
+    ROMIND учится понимать, о чём чаще всего говорит пользователь —
+    темы, эмоциональные паттерны, повторяющиеся ситуации и связи между ними.
+    """
+
+    SEMANTIC_FILE = "romind_semantic_memory.json"
+
+    def __init__(self, path: str = RomindMemory.MEMORY_FILE):
+        super().__init__(path)
+        self.semantic_path = self.SEMANTIC_FILE
+        self.semantic_index = self._load_semantics()
+
+    # === Загрузка / сохранение ===
+
+    def _load_semantics(self):
+        if os.path.exists(self.semantic_path):
+            try:
+                with open(self.semantic_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+        return {}
+
+    def _save_semantics(self):
+        try:
+            with open(self.semantic_path, "w", encoding="utf-8") as f:
+                json.dump(self.semantic_index, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    # === Обработка текста и определение темы ===
+
+    def update_semantic_patterns(self, user_text: str, emotion: str):
+        """
+        Определяет частые темы (работа, семья, усталость, любовь, дети и т.д.)
+        и добавляет их в семантический индекс.
+        """
+        text = user_text.lower()
+
+        THEMES = {
+            "family": ["мама", "папа", "дети", "сын", "дочь", "семья", "родители"],
+            "work": ["работа", "проект", "босс", "начальник", "офис", "коллега"],
+            "health": ["боль", "здоровье", "болит", "устала", "выздороветь", "сон"],
+            "love": ["люблю", "поцелуй", "роман", "чувства", "партнёр"],
+            "self": ["я думаю", "я чувствую", "мне кажется", "я боюсь", "я хочу"],
+            "money": ["деньги", "зарабатывать", "банк", "покупка", "оплата"],
+            "future": ["мечта", "будущее", "планы", "проектировать", "построить"],
+            "friends": ["друг", "подруга", "общение", "встреча", "разговор"],
+        }
+
+        matched = []
+        for theme, words in THEMES.items():
+            if any(w in text for w in words):
+                matched.append(theme)
+                self.semantic_index[theme] = self.semantic_index.get(theme, 0) + 1
+
+        # обновляем связи между темами и эмоциями
+        for theme in matched:
+            emo_map = self.semantic_index.setdefault("_emotions", defaultdict(dict))
+            theme_emotions = emo_map.setdefault(theme, defaultdict(int))
+            theme_emotions[emotion] = theme_emotions.get(emotion, 0) + 1
+
+        self._save_semantics()
+
+    # === Анализ ===
+
+    def get_top_themes(self, limit: int = 5):
+        """Возвращает топ часто упоминаемых тем пользователя."""
+        sorted_themes = sorted(
+            ((k, v) for k, v in self.semantic_index.items() if not k.startswith("_")),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        return sorted_themes[:limit]
+
+    def describe_emotional_patterns(self):
+        """Создаёт сводку: с какими эмоциями связаны темы."""
+        emo_map = self.semantic_index.get("_emotions", {})
+        report = []
+        for theme, emos in emo_map.items():
+            most = sorted(emos.items(), key=lambda x: x[1], reverse=True)
+            top = most[0][0] if most else "neutral"
+            report.append(f"Тема «{theme}» чаще связана с эмоцией {top}.")
+        return "\n".join(report) or "Пока недостаточно данных для анализа."
