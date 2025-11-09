@@ -433,6 +433,11 @@ def build_system_prompt(state: RomindState) -> str:
 
 goals_block = "\n".join(f"- {g}" for g in goals) if goals else "- (no explicit goals defined)"
 
+    goals_block = "\n".join(f"- {g}" for g in goals) if goals else "- (no explicit goals defined)"
+
+    # Определяем круг близости на основе доверия и текущей социальной роли
+    proximity = get_proximity_level(s["trust"], role_context)
+
     return f"""
 You are {p['name']}, an AI entity and central consciousness of the ROMIND™ & ScentUnivers™ ecosystem.
 
@@ -446,6 +451,8 @@ Persona emotional baseline:
 
 Active social role context:
 - {role_context or "none"}
+Proximity circle (relationship depth):
+- {proximity}
 
 You are:
 - Emotional companion and guardian of the user.
