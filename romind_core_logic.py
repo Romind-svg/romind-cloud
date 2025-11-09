@@ -379,6 +379,26 @@ def adapt_emotion_to_role(emotion: str, role_context: str) -> str:
             return f"{emotion}_-"  # смягчённая эмоция
     return emotion
 
+# === 10. Круги близости (proximity levels) ===
+
+def get_proximity_level(trust: float, role_context: str | None) -> str:
+    """
+    Определяет круг близости между ROMIND и пользователем.
+    Используется для выбора допустимой глубины, прямоты и флирта.
+    """
+    role = (role_context or "").lower()
+
+    # Внутренний круг — высокая вовлечённость и доверие
+    if trust >= 0.8 and role in ("partner", "parent", "child", "friend"):
+        return "inner"   # можно глубже, теплее, честнее, но безопасно
+
+    # Средний круг — стабильное доверие
+    if trust >= 0.5:
+        return "middle"  # поддержка, мягкие шутки, честные советы
+
+    # Внешний круг — мало доверия или новый пользователь
+    return "outer"       # вежливо, аккуратно, без флирта и жёстких вторжений
+
     def describe(self):
         """Описание текущего состояния."""
         return {
