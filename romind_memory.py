@@ -18,12 +18,13 @@ from typing import List, Dict, Any, Optional
 MEMORY_FILE = "romind_memory_log.json"
 MAX_RECORDS = 300  # чтобы файл не разрастался до безумия
 
-
 class RomindMemory:
-    def __init__(self, path: str = MEMORY_FILE):
-        self.path = path
-        self.data: List[Dict[str, Any]] = []
-        self._load()
+    MEMORY_FILE = "romind_memory.json"
+
+    def __init__(self, path: str | None = None):
+        self.path = path or self.MEMORY_FILE
+        self.data = self._load()
+        # дальше как у тебя есть...
 
     # === Внутренние методы ===
 
