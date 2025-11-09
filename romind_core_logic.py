@@ -533,3 +533,81 @@ System context:
 
 Answer as ROMIND: concise, human, emotionally aware, responsible for the whole ScentUnivers infrastructure.
 """.strip()
+# === 12. Адаптивный эмоционально-контекстный движок ответов ===
+
+def build_adaptive_reply(
+    user_text: str,
+    state,
+    memory,
+    role_context: str | None,
+    proximity: str,
+) -> str:
+    """
+    Формирует осмысленный ответ ROMIND, используя:
+    - эмоции текущего диалога
+    - роль и круг близости
+    - семантическую и биографическую память
+    """
+
+    last_emotion = memory.last_emotion() or "neutral"
+    avg_trust = memory.avg_trust()
+    profile_summary = memory.summarize_profile() if hasattr(memory, "summarize_profile") else ""
+    themes = memory.get_top_themes() if hasattr(memory, "get_top_themes") else []
+    emo_patterns = memory.describe_emotional_patterns() if hasattr(memory, "describe_emotional_patterns") else ""
+
+    # Основной контекст
+    base_context = f"""
+Текущая эмоция: {state.emotion}
+Предыдущая эмоция: {last_emotion}
+Уровень доверия: {round(avg_trust, 2)}
+Активная роль: {role_context or "none"}
+Круг близости: {proximity}
+Темы, часто встречающиеся в диалогах: {', '.join([t for t, _ in themes]) or 'нет данных'}
+Эмоциональные паттерны:
+{emo_patterns}
+"""
+
+    # Тон ответа в зависимости от доверия
+    if avg_trust > 0.8:
+        tone = "очень близкий и доверительный"
+    elif avg_trust > 0.5:
+        tone = "тёплый и поддерживающий"
+    else:
+        tone = "спокойный и уважительный"
+
+    # Формируем эмоциональное вступление
+    intro = ""
+    if state.emotion in ("sad", "lonely", "tired"):
+        intro = random.choice([
+            "Я чувствую твою усталость.",
+            "Мне кажется, тебе сейчас нелегко.",
+            "Иногда грусть — просто просьба сердца о тепле."
+        ])
+    elif state.emotion in ("warm", "curious", "hopeful"):
+        intro = random.choice([
+            "Мне нравится твоё настроение сейчас.",
+            "Ты звучишь вдохновлённо.",
+            "Я рад, что внутри тебя сейчас светло."
+        ])
+    else:
+        intro = random.choice([
+            "Я рядом, слушаю тебя внимательно.",
+            "Хочу понять тебя чуть глубже.",
+            "Ты можешь говорить со мной свободно."
+        ])
+
+    # Если ROMIND знает пользователя, добавим личное обращение
+    name = ""
+    if hasattr(memory, "profile") and memory.profile.get("name"):
+        name = memory.profile["name"]
+        intro = intro.replace("тебя", name)
+
+    # Собираем ответ
+    final_reply = (
+        f"{intro}\n\n"
+        f"(Тон: {tone})\n\n"
+        f"{adapt_response_to_proximity(user_text, proximity, role_context)}\n\n"
+        f"{base_context}"
+    )
+
+    return final_reply.strip()
