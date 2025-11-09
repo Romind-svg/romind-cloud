@@ -169,3 +169,40 @@ def root():
         "message": "ROMIND Cloud Core is online.",
         "hint": "Send POST /chat with { persona, message, history } to talk to ROMIND."
     }
+
+# === 11. Диалоговая обработка с адаптивным поведением ROMIND ===
+from romind_core_logic import get_proximity_level, adapt_response_to_proximity
+
+def process_user_message(user_text: str) -> str:
+    """
+    Обрабатывает текст пользователя: определяет эмоцию, роль и близость.
+    Возвращает адаптированный ответ ROMIND.
+    """
+    # 1. Обновляем эмоциональное состояние
+    state.update_from_user_text(user_text)
+
+    # 2. Определяем роль и круг близости
+    role = getattr(state, "role_context", None)
+    proximity = get_proximity_level(state.trust, role)
+
+    # 3. Базовый ответ на основе эмоции
+    base_reply = f"Я чувствую, что ты сейчас ощущаешь {state.emotion}. Это важно."
+
+    # 4. Адаптация под близость и социальную роль
+    adaptive_reply = adapt_response_to_proximity(base_reply, proximity, role)
+
+    # 5. Возврат финального ответа
+    return adaptive_reply
+
+
+# === 12. Консольный тест (локальный режим) ===
+if __name__ == "__main__":
+    print("=== ROMIND Adaptive Dialogue Test ===")
+    while True:
+        user_text = input("\nТы: ")
+        if user_text.lower() in ["выход", "exit", "quit"]:
+            print("ROMIND: До встречи 🌙")
+            break
+
+        response = process_user_message(user_text)
+        print(f"ROMIND: {response}")
