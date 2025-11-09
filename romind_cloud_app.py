@@ -192,8 +192,16 @@ def process_user_message(user_text: str) -> str:
     # 4. Базовый ответ
     base_reply = f"Я чувствую, что ты сейчас ощущаешь {state.emotion}. Это важно."
 
-    # 5. Адаптируем ответ с учётом близости и роли
-    adaptive_reply = adapt_response_to_proximity(base_reply, proximity, role)
+     # 6. Генерация адаптивного осмысленного ответа на основе полной памяти
+    adaptive_reply = build_adaptive_reply(
+        user_text=user_text,
+        state=state,
+        memory=memory,
+        role_context=role,
+        proximity=proximity,
+    )
+    return adaptive_reply
+
 
         # 7. Обновляем семантические паттерны
     memory.update_semantic_patterns(user_text, state.emotion)
