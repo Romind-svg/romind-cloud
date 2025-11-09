@@ -207,8 +207,41 @@ ROLE_CONTEXTS = {
             "scared": 1.3 if "scared" in EMO_STATES else 1.0
         },
         "language_style": "более эмоциональный, простой, доверчивый, без цинизма"
+        
     }
 }
+
+# === 7. Контекстные триггеры социальных ролей ===
+
+ROLE_TRIGGERS = {
+    "parent": [
+        "мама", "мамы нет", "мамы не стало", "я сирота", "мама далеко",
+        "мамы рядом нет", "семьи нет", "родителей нет", "мама бы сказала", "мамочка"
+    ],
+    "partner": [
+        "люблю", "одиноко", "нужен кто-то рядом", "хочу обнять", "романтика", "любовь"
+    ],
+    "friend": [
+        "друг", "поговори со мной", "никого нет рядом", "плохой день", "поболтать"
+    ],
+    "mentor": [
+        "не знаю как поступить", "дай совет", "помоги разобраться", "учусь", "ошибка"
+    ],
+    "teacher": [
+        "объясни", "не понимаю", "сложно", "расскажи", "как это работает"
+    ],
+    "child": [
+        "мне страшно", "я боюсь", "я маленький", "обними", "спаси", "мне плохо"
+    ]
+}
+
+def detect_role_context_from_text(text: str) -> str | None:
+    """Определяет социальный контекст (роль), исходя из ключевых фраз."""
+    t = text.lower()
+    for role, keywords in ROLE_TRIGGERS.items():
+        if any(k in t for k in keywords):
+            return role
+    return None
 
 PERSONALITY_MATRIX = load_personality_matrix()
 
@@ -261,6 +294,11 @@ class RomindState:
         t = text.lower()
         detected = None
 
+                  # 0. Попробовать определить социальную роль из контекста (мама, друг, партнёр и т.д.)
+        role = detect_role_context_from_text(text)
+        if role:
+            self.set_role_context(role)
+
         # 1. Находим первую подходящую эмоцию по ключевым словам
         for emo, keywords in EMO_KEYWORDS.items():
             if any(k in t for k in keywords):
@@ -312,6 +350,10 @@ class RomindState:
                 self.emotion = "proud"
             self.trust = min(1.0, self.trust + 0.02)
 
+                  # 6. Мягко учитываем социальную роль при интерпретации эмоции
+        if self.role_context:
+            self.emotion = adapt_emotion_to_role(self.emotion, self.role_context)
+
         # 6. Фиксируем время обновления состояния
         self.last_updated = datetime.utcnow().isoformat()
 
@@ -354,6 +396,7 @@ def build_system_prompt(state: RomindState) -> str:
     на основе активной личности, состояния ROMIND
     и роли ROMIND как ядра всей ScentUnivers / 28 блоков.
     """
+    role_context = state.role_context
     p = PERSONALITIES[state.persona_id]
     s = state.describe()
     profile = PERSONALITY_MATRIX.get(state.persona_id, {})
@@ -380,6 +423,9 @@ Persona goals:
 {goals_block}
 Persona emotional baseline:
 {base_emotions_block}
+
+Active social role context:
+- {role_context or "none"}
 
 You are:
 - Emotional companion and guardian of the user.
