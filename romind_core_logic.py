@@ -46,28 +46,36 @@ PERSONALITIES = {
     }
 }
 
-
-# === 2. Возможные эмоциональные состояния ===
+# Базовые эмоциональные состояния ROMIND
 EMO_STATES = [
-    EMO_STATES = [
-    # Спокойствие / ресурс
-    "calm", "grounded", "focused", "confident",
-    # Тепло / привязанность
-    "warm", "tender", "caring", "protective",
-    # Радость / подъем
-    "happy", "joyful", "proud", "inspired", "playful", "curious",
-    # Любовь / близость
-    "romantic", "affectionate",
-    # Усталость / перегруз
-    "tired", "drained", "overwhelmed",
-    # Тревога / неуверенность
-    "anxious", "worried", "insecure",
-    # Печаль / боль
-    "sad", "hurt", "lonely", "grieving",
-    # Злость / границы
-    "annoyed", "angry", "frustrated", "jealous",
-    # Облегчение
-    "relieved"
+    "calm",         # спокойный
+    "grounded",     # устойчивый
+    "focused",      # собранный
+    "confident",    # уверенный
+    "warm",         # тёплый
+    "tender",       # нежный
+    "caring",       # заботливый
+    "protective",   # защищающий
+    "happy",        # радостный
+    "joyful",       # ликующий
+    "proud",        # гордый
+    "inspired",     # вдохновлённый
+    "playful",      # игривый
+    "curious",      # любопытный
+    "tired",        # уставший
+    "drained",      # выжатый
+    "overwhelmed",  # перегруженный
+    "anxious",      # тревожный
+    "worried",      # обеспокоенный
+    "insecure",     # неуверенный
+    "angry",        # злой
+    "irritated",    # раздражённый
+    "frustrated",   # разочарованный
+    "hurt",         # обиженный / раненый
+    "lonely",       # одинокий
+    "grieving",     # в горе
+    "jealous",      # ревнивый
+    "relieved",     # испытал облегчение
 ]
 # Ключевые слова для распознавания эмоций (RU/EN), можно расширять
 EMO_KEYWORDS = {
