@@ -260,6 +260,7 @@ class RomindState:
     - активная личность
     - эмоциональное состояние
     - уровень доверия к пользователю
+    - текущая социальная роль (partner/parent/friend/mentor/child)
     """
 
     def __init__(self):
@@ -267,23 +268,62 @@ class RomindState:
         self.emotion = "calm"
         self.trust = 0.7
         self.last_updated = datetime.utcnow().isoformat()
-        self.role_context = None  # текущая социальная роль: partner/parent/friend/mentor/child
+        self.role_context: str | None = None
 
     def switch_persona(self, target_id: str):
         """Переключение между личностями."""
         if target_id in PERSONALITIES:
             self.persona_id = target_id
-            self._adapt_emotion_to_persona()
             self.last_updated = datetime.utcnow().isoformat()
-    def set_role_context(self, role: str):
-        """Устанавливает социальную роль (partner, parent, friend, mentor, child)."""
-        role = (role or "").lower()
+
+    def set_role_context(self, role: str | None):
+        """
+        Устанавливает социальный контекст:
+        'partner', 'parent', 'friend', 'mentor', 'child' или None.
+        """
         if role in ROLE_CONTEXTS:
             self.role_context = role
         else:
             self.role_context = None
 
-    def _adapt_emotion_to_persona(self):
+    def update_from_user_text(self, text: str):
+        """
+        Обновляет эмоциональное состояние на основе текста пользователя.
+        Простая эвристика на ключевых словах.
+        """
+        t = text.lower()
+        detected = None
+
+        # 1. Ищем первую подходящую эмоцию по ключевым словам
+        for emo, keywords in EMO_KEYWORDS.items():
+            if any(k in t for k in keywords):
+                detected = emo
+                break
+
+        # 2. Применяем найденную эмоцию (если есть)
+        if detected in EMO_STATES:
+            self.emotion = detected
+
+        # 3. Чуть корректируем доверие (очень грубо, пока демо)
+        if any(w in t for w in ["спасибо", "thank you", "благодарю"]):
+            self.trust = min(1.0, self.trust + 0.02)
+        if any(w in t for w in ["ненавижу", "ты плохой", "отстань"]):
+            self.trust = max(0.0, self.trust - 0.05)
+
+        # 4. Обновляем timestamp
+        self.last_updated = datetime.utcnow().isoformat()
+
+    def describe(self) -> dict:
+        """Краткое описание текущего состояния."""
+        return {
+            "persona": self.persona_id,
+            "emotion": self.emotion,
+            "trust": round(self.trust, 3),
+            "role_context": self.role_context,
+            "last_updated": self.last_updated,
+        }
+        
+def _adapt_emotion_to_persona(self):
         """Настройка эмоции в зависимости от личности."""
         if self.persona_id in ("MIRA", "ROMIND"):
             self.emotion = "warm"
@@ -297,7 +337,7 @@ class RomindState:
             self.emotion = "tender"
 
 
-      def update_from_user_text(self, text: str):
+def update_from_user_text(self, text: str):
         """Обновляет эмоциональное состояние на основе текста пользователя."""
         t = text.lower()
         detected = None
