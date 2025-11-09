@@ -36,8 +36,7 @@ app = FastAPI(
 )
 
 state = RomindState()
-memory = RomindMemory()
-
+memory = RomindSemanticMemory()
 
 # --- Модели запросов ---
 
@@ -195,6 +194,9 @@ def process_user_message(user_text: str) -> str:
 
     # 5. Адаптируем ответ с учётом близости и роли
     adaptive_reply = adapt_response_to_proximity(base_reply, proximity, role)
+
+        # 7. Обновляем семантические паттерны
+    memory.update_semantic_patterns(user_text, state.emotion)
 
     return adaptive_reply
 
