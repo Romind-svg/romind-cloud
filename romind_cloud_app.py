@@ -2,17 +2,25 @@
 # Облачное приложение ROMIND.
 # - Общается через HTTP (FastAPI)
 # - Использует RomindState + build_system_prompt как "мозг"
-# - Использует RomindMemory для обучения командой "ROMIND, запомни: ..."
+# - Использует RomindSemanticMemory для памяти и анализа
 # - Если есть OPENAI_API_KEY -> отвечает через GPT в стиле ROMIND
 # - Если ключа нет -> отвечает через offline-логику (демо живёт всегда)
+# - Внизу есть консольный режим для локального теста
+
+import os
+from typing import List, Optional
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List, Optional
-import os
 
-from romind_core_logic import RomindState, build_system_prompt
-from romind_memory import RomindMemory
+from romind_core_logic import (
+    RomindState,
+    build_system_prompt,
+    build_adaptive_reply,
+    get_proximity_level,
+    adapt_response_to_proximity,
+)
+from romind_memory import RomindSemanticMemory
 
 # --- Попытка инициализировать OpenAI-клиент (новый SDK) ---
 
@@ -36,8 +44,7 @@ app = FastAPI(
 )
 
 state = RomindState()
-memory = RomindMemory()
-
+memory = RomindSemanticMemory()
 
 # --- Модели запросов ---
 
@@ -73,11 +80,11 @@ def offline_reply(user_message: str) -> str:
     }
     base = base_map.get(persona, "Я рядом.")
 
-    if emotion == "tired":
+    if emotion in ("tired", "drained", "overwhelmed"):
         extra = " Ты устала — убираем лишнее, оставляем главное."
-    elif emotion == "stressed":
+    elif emotion in ("anxious", "worried"):
         extra = " В хаосе спасает структура. Давай 1–3 шага."
-    elif emotion == "energized":
+    elif emotion in ("happy", "joyful", "inspired"):
         extra = " Хороший импульс. Закрепим его конкретным решением."
     else:
         extra = ""
@@ -103,13 +110,76 @@ def romind_answer_via_gpt(user_message: str, history: Optional[List[HistoryItem]
             messages.append({"role": h.role, "content": h.content})
     messages.append({"role": "user", "content": user_message})
 
-    completion = client.chat.completions.create(
-        model="gpt-4.1-mini",  # экономичная модель для демо
-        messages=messages,
-        temperature=0.7,
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4.1-mini",  # экономичная модель для демо
+            messages=messages,
+            temperature=0.7,
+        )
+        reply = completion.choices[0].message.content.strip()
+    except Exception:
+        reply = offline_reply(user_message)
+
+    return reply
+
+
+# --- Внутренняя обработка сообщения (общая для API и консоли) ---
+
+def process_user_message(user_text: str, use_gpt: bool = True) -> str:
+    """
+    Полный цикл:
+    - обновить состояние
+    - записать память
+    - обновить биографию и семантику
+    - сгенерировать адаптивный ответ
+    """
+    # 1. Обновляем состояние по тексту
+    state.update_from_user_text(user_text)
+
+    # 2. Логируем взаимодействие в память
+    try:
+        memory.remember(
+            user_text=user_text,
+            persona_id=state.persona_id,
+            role_context=state.role_context,
+            emotion=state.emotion,
+            trust=state.trust,
+        )
+    except Exception:
+        pass
+
+    # 3. Обновляем биографический профиль
+    try:
+        memory.update_profile(user_text)
+    except Exception:
+        pass
+
+    # 4. Обновляем семантические паттерны
+    try:
+        memory.update_semantic_patterns(user_text, state.emotion)
+    except Exception:
+        pass
+
+    # 5. Если есть GPT и включен use_gpt — пробуем онлайн-ответ
+    if use_gpt:
+        base_reply = romind_answer_via_gpt(user_text, history=None)
+    else:
+        base_reply = offline_reply(user_text)
+
+    # 6. Адаптация под круг близости и роль
+    role = state.role_context
+    proximity = get_proximity_level(state.trust, role)
+    adapted = adapt_response_to_proximity(base_reply, proximity, role)
+
+    # 7. Дополнительный слой: высокоуровневая адаптация (интро + память)
+    final_reply = build_adaptive_reply(
+        user_text=user_text,
+        state=state,
+        memory=memory,
     )
 
-    return completion.choices[0].message.content.strip()
+    # Если build_adaptive_reply что-то даёт — используем его, иначе adapted
+    return final_reply or adapted
 
 
 # --- Основной endpoint /chat ---
@@ -120,10 +190,16 @@ def chat(req: ChatRequest):
     if req.persona:
         state.switch_persona(req.persona.upper())
 
-    text = req.message.strip()
+    text = (req.message or "").strip()
     lower = text.lower()
 
-    # 2. Режим обучения: "ROMIND, запомни: ..."
+    if not text:
+        return {
+            "state": state.describe(),
+            "reply": "Скажи мне что-нибудь, и я отвечу."
+        }
+
+    # 2. Режим явного обучения: "ROMIND, запомни: ..."
     teach_prefixes = (
         "romind, запомни:",
         "роминд, запомни:",
@@ -137,9 +213,23 @@ def chat(req: ChatRequest):
         content = parts[1].strip() if len(parts) == 2 else ""
 
         if content:
-            # Сохраняем правило в память ROMIND
-            memory.remember_rule(content, source="svetlana")
-            # Эмоционально — тёплый отклик
+            # Запишем как системное правило в память
+            try:
+                memory.remember(
+                    user_text=f"SYSTEM_RULE: {content}",
+                    persona_id=state.persona_id,
+                    role_context=state.role_context,
+                    emotion=state.emotion,
+                    trust=state.trust,
+                )
+            except Exception:
+                pass
+
+            try:
+                memory.update_semantic_patterns(content, state.emotion)
+            except Exception:
+                pass
+
             state.emotion = "warm"
             return {
                 "state": state.describe(),
@@ -151,9 +241,30 @@ def chat(req: ChatRequest):
                 "reply": "Скажи после двоеточия, что именно мне запомнить."
             }
 
-    # 3. Обычный диалог
+    # 3. Обычный диалог через GPT (если есть) или оффлайн
+    # (история из req.history может быть добавлена к GPT, если нужно)
     state.update_from_user_text(text)
+
+    # Логируем
+    try:
+        memory.remember(
+            user_text=text,
+            persona_id=state.persona_id,
+            role_context=state.role_context,
+            emotion=state.emotion,
+            trust=state.trust,
+        )
+        memory.update_profile(text)
+        memory.update_semantic_patterns(text, state.emotion)
+    except Exception:
+        pass
+
     reply = romind_answer_via_gpt(text, req.history or [])
+
+    # Адаптация под близость
+    role = state.role_context
+    proximity = get_proximity_level(state.trust, role)
+    reply = adapt_response_to_proximity(reply, proximity, role)
 
     return {
         "state": state.describe(),
@@ -170,54 +281,25 @@ def root():
         "hint": "Send POST /chat with { persona, message, history } to talk to ROMIND."
     }
 
-# === 11. Диалоговая обработка с адаптивным поведением ROMIND ===
-from romind_core_logic import get_proximity_level, adapt_response_to_proximity
 
-def process_user_message(user_text: str) -> str:
-    # 1. Обновляем состояние ROMIND по тексту пользователя
-    state.update_from_user_text(user_text)
+# --- Консольный тест (локальный режим) ---
 
-    # 2. Определяем роль и круг близости
-    role = getattr(state, "role_context", None)
-    proximity = get_proximity_level(state.trust, role)
-
-    # 3. Записываем это взаимодействие в память
-    memory.remember(
-        user_text=user_text,
-        persona_id=state.persona_id,
-        role_context=role,
-        emotion=state.emotion,
-        trust=state.trust,
-    )
-
-    # 4. Базовый ответ
-    base_reply = f"Я чувствую, что ты сейчас ощущаешь {state.emotion}. Это важно."
-
-     # 6. Генерация адаптивного осмысленного ответа на основе полной памяти
-    adaptive_reply = build_adaptive_reply(
-        user_text=user_text,
-        state=state,
-        memory=memory,
-        role_context=role,
-        proximity=proximity,
-    )
-    return adaptive_reply
-
-
-        # 7. Обновляем семантические паттерны
-    memory.update_semantic_patterns(user_text, state.emotion)
-
-    return adaptive_reply
-
-
-# === 12. Консольный тест (локальный режим) ===
 if __name__ == "__main__":
     print("=== ROMIND Adaptive Dialogue Test ===")
+    print("ROMIND онлайн. Напиши что-нибудь. ('выход' чтобы завершить)")
     while True:
-        user_text = input("\nТы: ")
-        if user_text.lower() in ["выход", "exit", "quit"]:
-            print("ROMIND: До встречи 🌙")
+        try:
+            user_text = input("\nТы: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nROMIND: Я рядом. Возвращайся, когда захочешь. 🌙")
             break
 
-        response = process_user_message(user_text)
+        if not user_text:
+            continue
+
+        if user_text.lower() in ("выход", "exit", "quit"):
+            print("ROMIND: До встречи. Я буду ждать.")
+            break
+
+        response = process_user_message(user_text, use_gpt=False)
         print(f"ROMIND: {response}")
