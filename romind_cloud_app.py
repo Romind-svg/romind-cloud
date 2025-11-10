@@ -36,7 +36,8 @@ app = FastAPI(
 )
 
 state = RomindState()
-memory = RomindSemanticMemory()
+memory = RomindMemory()
+
 
 # --- Модели запросов ---
 
