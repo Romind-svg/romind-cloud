@@ -1,13 +1,16 @@
 """
-romind_memory.py
+Эмоциональная и семантическая память ROMIND.
 
-Эмоциональная память ROMIND.
 Хранит краткую историю взаимодействий:
 - текст пользователя
 - активная персона
-- роль (мама/друг/партнёр/наставник и т.д.)
+- социальная роль (мама/друг/партнёр/наставник и т.д.)
 - эмоция ROMIND о пользователе
 - уровень доверия
+
+Плюс расширенный слой:
+- биографические факты о пользователе
+- семантические паттерны (темы и связанные эмоции)
 """
 
 import json
@@ -15,42 +18,68 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-MEMORY_FILE = "romind_memory_log.json"
-MAX_RECORDS = 300  # чтобы файл не разрастался до безумия
+
+# Отдельный лог, если захочется писать "сырые" события
+MEMORY_LOG_FILE = "romind_memory_log.json"
+# Ограничение размера истории
+MAX_RECORDS = 300
+
+
+# === 1. Базовая эмоциональная память ===
 
 class RomindMemory:
+    """
+    Базовая JSON-память ROMIND.
+
+    Записи формата:
+    {
+        "time": ISO-время,
+        "user_text": str,
+        "persona": str,
+        "role_context": str | None,
+        "emotion": str,
+        "trust": float,
+    }
+    """
+
     MEMORY_FILE = "romind_memory.json"
 
-    def __init__(self, path: str | None = None):
-        self.path = path or self.MEMORY_FILE
-        self.data = self._load()
-        # дальше как у тебя есть...
+    def __init__(self, path: Optional[str] = None) -> None:
+        # Путь к файлу памяти (можно переопределить)
+        self.path: str = path or self.MEMORY_FILE
+        # ВСЕГДА список, никогда None
+        self.data: List[Dict[str, Any]] = []
+        # Подгружаем, если есть
+        self._load()
 
-    # === Внутренние методы ===
+    # --- Внутренние методы ---
 
-    def _load(self):
+    def _load(self) -> None:
         """Загружает память из файла, если он существует."""
         if os.path.exists(self.path):
             try:
                 with open(self.path, "r", encoding="utf-8") as f:
-                    self.data = json.load(f)
+                    raw = json.load(f)
+                if isinstance(raw, list):
+                    self.data = raw
+                else:
+                    self.data = []
             except Exception:
                 self.data = []
         else:
             self.data = []
 
-    def _save(self):
-        """Сохраняет память в файл."""
+    def _save(self) -> None:
+        """Сохраняет память в файл (обрезая до MAX_RECORDS)."""
         try:
-            # обрезаем до MAX_RECORDS последних записей
             trimmed = self.data[-MAX_RECORDS:]
             with open(self.path, "w", encoding="utf-8") as f:
                 json.dump(trimmed, f, ensure_ascii=False, indent=2)
         except Exception:
-            # в продакшене логируем, здесь — молчим
+            # Память не должна рушить ROMIND
             pass
 
-    # === Публичные методы ===
+    # --- Публичные методы ---
 
     def remember(
         self,
@@ -59,15 +88,15 @@ class RomindMemory:
         role_context: Optional[str],
         emotion: str,
         trust: float,
-    ):
+    ) -> None:
         """Записывает одно эмоциональное событие."""
-        record = {
+        record: Dict[str, Any] = {
             "time": datetime.utcnow().isoformat(),
             "user_text": user_text,
             "persona": persona_id,
             "role_context": role_context,
             "emotion": emotion,
-            "trust": round(trust, 3),
+            "trust": round(float(trust), 3),
         }
         self.data.append(record)
         self._save()
@@ -82,197 +111,310 @@ class RomindMemory:
         """Средний уровень доверия по истории."""
         if not self.data:
             return 0.0
-        values = [r.get("trust", 0.0) for r in self.data]
-        return float(sum(values) / len(values))
+        values = [float(r.get("trust", 0.0)) for r in self.data]
+        return sum(values) / len(values)
 
     def recent_context(self, limit: int = 5) -> List[Dict[str, Any]]:
         """Последние N записей для анализа."""
         return self.data[-limit:]
-# === 2. Расширенный биографический слой памяти (Full Memory Layer) ===
+
+
+# === 2. Расширенный биографический слой памяти ===
 
 class RomindFullMemory(RomindMemory):
     """
-    Расширенная память ROMIND:
-    - хранит не только эмоции, но и знания о пользователе
-    - постепенно формирует биографию: факты, интересы, окружение
-    - обновляется по мере общения
+    Полная биографическая память ROMIND.
+
+    Структура self.profile:
+    {
+        "primary": {  # базовая идентичность (не должна теряться)
+            "name": str | None,
+            "birthdate": str | None,
+            "location": str | None,
+            "occupation": str | None,
+            "children": int | None,
+            "partner": str | None,
+        },
+        "secondary": {  # интересы, привычки, вкусы, soft-факты
+            "likes": [str],
+            "dislikes": [str],
+            "hobbies": [str],
+            "values": [str],
+            "possessions": [str],
+        },
+        "emotional": {  # эмоциональный портрет
+            "baseline": str | None,      # общий тон
+            "sensitive_topics": [str],   # к чему больно
+            "comfort_topics": [str],     # что успокаивает
+        },
+        "meta": {
+            "updated_at": str,           # последнее обновление
+            "facts_count": int,          # сколько фактов собрано
+        }
+    }
+
+    Чем дольше ROMIND общается с человеком, тем богаче становится профиль.
+    Ничего важного не затирается без причины.
     """
 
     BIOGRAPHY_FILE = "romind_user_biography.json"
 
-    def __init__(self, path: str = RomindMemory.MEMORY_FILE):
-        super().__init__(path)
-        self.bio_path = self.BIOGRAPHY_FILE
-        self.profile = self._load_biography()
+    def __init__(self, path: Optional[str] = None) -> None:
+        super().__init__(path or RomindMemory.MEMORY_FILE)
+        self.bio_path: str = self.BIOGRAPHY_FILE
+        self.profile: Dict[str, Any] = self._load_biography()
 
-    def _load_biography(self):
-        """Загружает биографическую информацию."""
+    # --- Загрузка / сохранение ---
+
+    def _empty_profile(self) -> Dict[str, Any]:
+        return {
+            "primary": {
+                "name": None,
+                "birthdate": None,
+                "location": None,
+                "occupation": None,
+                "children": None,
+                "partner": None,
+            },
+            "secondary": {
+                "likes": [],
+                "dislikes": [],
+                "hobbies": [],
+                "values": [],
+                "possessions": [],
+            },
+            "emotional": {
+                "baseline": None,
+                "sensitive_topics": [],
+                "comfort_topics": [],
+            },
+            "meta": {
+                "updated_at": datetime.utcnow().isoformat(),
+                "facts_count": 0,
+            },
+        }
+
+    def _load_biography(self) -> Dict[str, Any]:
         if os.path.exists(self.bio_path):
             try:
                 with open(self.bio_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    # мягко дополняем недостающие поля
+                    base = self._empty_profile()
+                    for k, v in data.items():
+                        if k in base and isinstance(v, dict):
+                            base[k].update(v)
+                        else:
+                            base[k] = v
+                    return base
             except Exception:
-                return {}
-        return {}
+                pass
+        return self._empty_profile()
 
-    def _save_biography(self):
-        """Сохраняет обновлённую биографию."""
+    def _save_biography(self) -> None:
         try:
+            self.profile["meta"]["updated_at"] = datetime.utcnow().isoformat()
+            # пересчёт фактов
+            facts = 0
+            for section in ("primary", "secondary", "emotional"):
+                block = self.profile.get(section, {})
+                if isinstance(block, dict):
+                    for v in block.values():
+                        if isinstance(v, list):
+                            facts += len([x for x in v if x])
+                        elif v not in (None, "", 0):
+                            facts += 1
+            self.profile["meta"]["facts_count"] = facts
+
             with open(self.bio_path, "w", encoding="utf-8") as f:
                 json.dump(self.profile, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
 
-    # === Анализ и добавление фактов ===
+    # --- Обновление профиля по тексту пользователя ---
 
-    def update_profile(self, user_text: str):
+    def update_profile(self, user_text: str) -> None:
         """
-        Анализирует текст пользователя и добавляет новые факты о нём.
-        Распознаёт паттерны вроде: 'я живу в...', 'у меня есть дети', 'я люблю...', 'моя работа...'
+        Извлекает биографические сигналы из текста.
+        Наращивает знания, не затирая уже известное.
         """
         text = user_text.lower()
+        p = self.profile["primary"]
+        s = self.profile["secondary"]
+        e = self.profile["emotional"]
 
-        # === Обнаружение базовых фактов ===
-        if "я живу" in text:
-            place = text.split("я живу")[-1].strip().split()[0:4]
-            self.profile["location"] = " ".join(place)
-        if "меня зовут" in text:
-            name = text.split("меня зовут")[-1].strip().split()[0]
-            self.profile["name"] = name.capitalize()
-        if "я люблю" in text:
-            love = text.split("я люблю")[-1].strip().split(",")[0:6]
-            loves = self.profile.get("likes", [])
-            loves.append(" ".join(love))
-            self.profile["likes"] = list(set(loves))
-        if "моя работа" in text or "я работаю" in text:
-            job = text.split("работаю")[-1].strip().split()[0:6]
-            self.profile["occupation"] = " ".join(job)
-        if "у меня есть" in text:
-            thing = text.split("у меня есть")[-1].strip().split(",")[0:6]
-            owned = self.profile.get("possessions", [])
-            owned.append(" ".join(thing))
-            self.profile["possessions"] = list(set(owned))
+        # Имя
+        if "меня зовут" in text and not p["name"]:
+            name = text.split("меня зовут", 1)[-1].strip().split()[0]
+            if name:
+                p["name"] = name.capitalize()
+
+        # Локация (город/страна)
+        if "я живу" in text and not p["location"]:
+            place = text.split("я живу", 1)[-1].strip().split()[0:5]
+            if place:
+                p["location"] = " ".join(place)
+
+        # Работа
+        if "я работаю" in text and not p["occupation"]:
+            job = text.split("я работаю", 1)[-1].strip().split()[0:8]
+            if job:
+                p["occupation"] = " ".join(job)
+
+        # Дети
         if "у меня трое детей" in text or "у меня 3 детей" in text:
-            self.profile["children"] = 3
+            p["children"] = 3
         elif "у меня двое детей" in text or "у меня 2 детей" in text:
-            self.profile["children"] = 2
+            p["children"] = 2
         elif "у меня один ребёнок" in text or "у меня 1 ребёнок" in text:
-            self.profile["children"] = 1
+            p["children"] = 1
 
-        # === Запоминаем эмоциональный оттенок высказывания ===
-        last_emotion = self.last_emotion()
-        if last_emotion:
-            self.profile["emotional_tone"] = last_emotion
+        # Партнёр (очень мягкий, без вторжения)
+        if "мой муж" in text or "моя жена" in text or "мой парень" in text or "моя девушка" in text:
+            p["partner"] = "есть"
 
-        # === Сохраняем обновления ===
+        # Интересы
+        if "я люблю" in text:
+            fragment = text.split("я люблю", 1)[-1].strip()
+            part = fragment.split(".")[0].split(",")[0:8]
+            likes = s["likes"]
+            item = " ".join(part).strip()
+            if item:
+                likes.append(item)
+                s["likes"] = sorted(set(likes))
+
+        # Вещи, которые важны
+        if "у меня есть" in text:
+            fragment = text.split("у меня есть", 1)[-1].strip()
+            part = fragment.split(".")[0].split(",")[0:8]
+            poss = s["possessions"]
+            item = " ".join(part).strip()
+            if item:
+                poss.append(item)
+                s["possessions"] = sorted(set(poss))
+
+        # Эмоциональный baseline
+        last = self.last_emotion()
+        if last:
+            # если baseline ещё не задан — задаём
+            if not e["baseline"]:
+                e["baseline"] = last
+
         self._save_biography()
 
     def summarize_profile(self) -> str:
-        """Создаёт краткий человеческий портрет пользователя на основе данных."""
-        name = self.profile.get("name", "друг")
-        location = self.profile.get("location", "неизвестно где")
-        job = self.profile.get("occupation", "не указана работа")
-        likes = ", ".join(self.profile.get("likes", [])) or "пока не делился интересами"
-        children = self.profile.get("children", "не указано")
+        """Человеческое резюме того, что ROMIND уже знает о пользователе."""
+        p = self.profile["primary"]
+        s = self.profile["secondary"]
+        e = self.profile["emotional"]
+        meta = self.profile["meta"]
+
+        likes = ", ".join(s["likes"]) if s["likes"] else "пока не делился интересами"
+        poss = ", ".join(s["possessions"]) if s["possessions"] else "не отмечено"
 
         return (
-            f"Имя: {name}\n"
-            f"Место проживания: {location}\n"
-            f"Работа: {job}\n"
+            f"Имя: {p['name'] or 'друг'}\n"
+            f"Место: {p['location'] or 'неизвестно'}\n"
+            f"Работа: {p['occupation'] or 'не указана'}\n"
+            f"Дети: {p['children'] if p['children'] is not None else 'не указано'}\n"
+            f"Партнёр: {'есть' if p['partner'] else 'не указано'}\n"
             f"Интересы: {likes}\n"
-            f"Дети: {children}\n"
-            f"Последний эмоциональный фон: {self.profile.get('emotional_tone', 'спокойный')}"
+            f"Важные вещи: {poss}\n"
+            f"Эмоциональный фон: {e['baseline'] or 'пока формируется'}\n"
+            f"Всего зафиксировано фактов: {meta.get('facts_count', 0)}"
         )
 
-# === 3. Семантическая память (Semantic Memory Layer) ===
-
-from collections import defaultdict
-import re
-
+# === 3. Семантическая память ===
 
 class RomindSemanticMemory(RomindFullMemory):
     """
-    Расширение FullMemory:
-    ROMIND учится понимать, о чём чаще всего говорит пользователь —
-    темы, эмоциональные паттерны, повторяющиеся ситуации и связи между ними.
+    Семантическая память ROMIND:
+
+    - считает, о чём чаще всего говорит пользователь (темы)
+    - связывает темы с эмоциями
     """
 
     SEMANTIC_FILE = "romind_semantic_memory.json"
 
-    def __init__(self, path: str = RomindMemory.MEMORY_FILE):
-        super().__init__(path)
-        self.semantic_path = self.SEMANTIC_FILE
-        self.semantic_index = self._load_semantics()
+    def __init__(self, path: Optional[str] = None) -> None:
+        super().__init__(path or RomindMemory.MEMORY_FILE)
+        self.semantic_path: str = self.SEMANTIC_FILE
+        self.semantic_index: Dict[str, Any] = self._load_semantics()
 
-    # === Загрузка / сохранение ===
-
-    def _load_semantics(self):
+    def _load_semantics(self) -> Dict[str, Any]:
         if os.path.exists(self.semantic_path):
             try:
                 with open(self.semantic_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
             except Exception:
-                return {}
+                pass
         return {}
 
-    def _save_semantics(self):
+    def _save_semantics(self) -> None:
         try:
             with open(self.semantic_path, "w", encoding="utf-8") as f:
                 json.dump(self.semantic_index, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
 
-    # === Обработка текста и определение темы ===
-
-    def update_semantic_patterns(self, user_text: str, emotion: str):
+    def update_semantic_patterns(self, user_text: str, emotion: str) -> None:
         """
-        Определяет частые темы (работа, семья, усталость, любовь, дети и т.д.)
+        Определяет частые темы (работа, семья, усталость, любовь и т.д.)
         и добавляет их в семантический индекс.
         """
         text = user_text.lower()
 
-        THEMES = {
+        THEMES: Dict[str, List[str]] = {
             "family": ["мама", "папа", "дети", "сын", "дочь", "семья", "родители"],
-            "work": ["работа", "проект", "босс", "начальник", "офис", "коллега"],
-            "health": ["боль", "здоровье", "болит", "устала", "выздороветь", "сон"],
-            "love": ["люблю", "поцелуй", "роман", "чувства", "партнёр"],
+            "work": ["работа", "проект", "босс", "начальник", "офис", "коллег"],
+            "health": ["боль", "здоровье", "болит", "устала", "устал", "сон"],
+            "love": ["люблю", "поцелуй", "роман", "чувства", "партнёр", "парень", "девушка"],
             "self": ["я думаю", "я чувствую", "мне кажется", "я боюсь", "я хочу"],
-            "money": ["деньги", "зарабатывать", "банк", "покупка", "оплата"],
-            "future": ["мечта", "будущее", "планы", "проектировать", "построить"],
-            "friends": ["друг", "подруга", "общение", "встреча", "разговор"],
+            "money": ["деньги", "зарабатывать", "банк", "кредит", "оплата", "счёт"],
+            "future": ["мечта", "будущее", "планы", "хочу построить", "проектировать"],
+            "friends": ["друг", "подруга", "компания", "встреча", "разговор"],
         }
 
-        matched = []
+        matched: List[str] = []
         for theme, words in THEMES.items():
             if any(w in text for w in words):
                 matched.append(theme)
-                self.semantic_index[theme] = self.semantic_index.get(theme, 0) + 1
+                self.semantic_index[theme] = int(self.semantic_index.get(theme, 0)) + 1
 
-        # обновляем связи между темами и эмоциями
+        if not matched:
+            return
+
+        # эмоции по темам
+        emo_map: Dict[str, Dict[str, int]] = self.semantic_index.setdefault("_emotions", {})
         for theme in matched:
-            emo_map = self.semantic_index.setdefault("_emotions", defaultdict(dict))
-            theme_emotions = emo_map.setdefault(theme, defaultdict(int))
-            theme_emotions[emotion] = theme_emotions.get(emotion, 0) + 1
+            theme_emotions = emo_map.setdefault(theme, {})
+            theme_emotions[emotion] = int(theme_emotions.get(emotion, 0)) + 1
 
         self._save_semantics()
 
-    # === Анализ ===
-
     def get_top_themes(self, limit: int = 5):
         """Возвращает топ часто упоминаемых тем пользователя."""
-        sorted_themes = sorted(
-            ((k, v) for k, v in self.semantic_index.items() if not k.startswith("_")),
-            key=lambda x: x[1],
-            reverse=True,
-        )
-        return sorted_themes[:limit]
+        items = [
+            (k, v)
+            for k, v in self.semantic_index.items()
+            if not k.startswith("_") and isinstance(v, int)
+        ]
+        items.sort(key=lambda x: x[1], reverse=True)
+        return items[:limit]
 
-    def describe_emotional_patterns(self):
+    def describe_emotional_patterns(self) -> str:
         """Создаёт сводку: с какими эмоциями связаны темы."""
-        emo_map = self.semantic_index.get("_emotions", {})
-        report = []
-        for theme, emos in emo_map.items():
-            most = sorted(emos.items(), key=lambda x: x[1], reverse=True)
-            top = most[0][0] if most else "neutral"
-            report.append(f"Тема «{theme}» чаще связана с эмоцией {top}.")
-        return "\n".join(report) or "Пока недостаточно данных для анализа."
+        emo_map: Dict[str, Dict[str, int]] = self.semantic_index.get("_emotions", {})
+        if not emo_map:
+            return "Пока недостаточно данных для анализа."
+
+        lines: List[str] = []
+        for theme, emo_stats in emo_map.items():
+            if not emo_stats:
+                continue
+            top_emo = max(emo_stats.items(), key=lambda x: x[1])[0]
+            lines.append(f"Тема «{theme}» чаще связана с эмоцией «{top_emo}».")
+        return "\n".join(lines) if lines else "Пока недостаточно данных для анализа."
